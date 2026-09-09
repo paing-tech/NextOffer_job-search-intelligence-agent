@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  if (pathname === "/login" || pathname.startsWith("/auth/")) return <>{children}</>;
   return (
     <div className="app-shell">
       <aside className="sidebar">
