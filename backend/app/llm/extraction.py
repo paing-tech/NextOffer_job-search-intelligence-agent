@@ -28,7 +28,6 @@ async def extract_job_posting(text: str, source_url: str | None = None) -> tuple
             {"role": "user", "content": user[:24000]},
         ],
         response_schema=strict_schema(JobPostingExtraction),
-        temperature=0.1,
         max_tokens=1200,
     )
     if result.parsed is None:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
@@ -242,6 +242,13 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     tool_calls: Mapped[dict | None] = mapped_column(JsonB)
     tool_call_id: Mapped[str | None] = mapped_column(String(80))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Python-side default: each row gets a distinct microsecond timestamp so
+    # messages in one turn keep their insertion order (the DB's now() is
+    # constant within a transaction and would scramble them).
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")

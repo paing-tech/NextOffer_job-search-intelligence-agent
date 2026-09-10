@@ -54,17 +54,24 @@ def _client():
         raise LLMNotConfigured(
             "FOUNDRY_ENDPOINT and FOUNDRY_API_KEY must be set to call the model."
         )
-    if _settings.foundry_api_version:
+    endpoint = _settings.foundry_endpoint.rstrip("/")
+
+    # Foundry unified endpoint (…/openai/v1) speaks the plain OpenAI protocol.
+    # Only the classic resource endpoint (…openai.azure.com, no /v1) needs the
+    # Azure client with an api-version.
+    use_azure = _settings.foundry_api_version and not endpoint.endswith("/openai/v1")
+
+    if use_azure:
         from openai import AsyncAzureOpenAI
 
         return AsyncAzureOpenAI(
-            azure_endpoint=_settings.foundry_endpoint,
+            azure_endpoint=endpoint,
             api_key=_settings.foundry_api_key,
             api_version=_settings.foundry_api_version,
         )
     from openai import AsyncOpenAI
 
-    return AsyncOpenAI(base_url=_settings.foundry_endpoint, api_key=_settings.foundry_api_key)
+    return AsyncOpenAI(base_url=endpoint, api_key=_settings.foundry_api_key)
 
 
 def _response_format(schema: dict | None) -> dict | None:
@@ -82,16 +89,22 @@ async def complete(
     tools: list[dict] | None = None,
     tool_choice: str = "auto",
     response_schema: dict | None = None,
-    temperature: float = 0.2,
+    temperature: float | None = None,
     max_tokens: int = 2048,
 ) -> LLMResult:
-    """One model call. Returns text and/or tool calls and/or a parsed object."""
+    """One model call. Returns text and/or tool calls and/or a parsed object.
+
+    GPT-5.x / reasoning-style deployments use ``max_completion_tokens`` (not
+    ``max_tokens``) and reject any ``temperature`` other than the default, so we
+    only send ``temperature`` when a caller explicitly asks for one.
+    """
     kwargs: dict[str, Any] = {
         "model": _settings.foundry_deployment,
         "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
+        "max_completion_tokens": max_tokens,
     }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice

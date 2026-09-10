@@ -44,6 +44,46 @@ def _history_to_messages(messages: list[ChatMessage]) -> list[dict]:
     return out
 
 
+def _sanitize(messages: list[dict]) -> list[dict]:
+    """Guarantee OpenAI's message-ordering rules so a malformed history can't 400 the API:
+    every `tool` message must directly follow the `assistant` message whose `tool_calls`
+    contains its id, and every assistant `tool_calls` must be fully answered.
+    """
+    out: list[dict] = []
+    expected: set[str] = set()  # tool_call ids still awaiting a `tool` reply
+
+    def _demote_last_tool_call() -> None:
+        for prev in reversed(out):
+            if prev.get("role") == "assistant" and prev.get("tool_calls"):
+                prev.pop("tool_calls")
+                prev["content"] = prev.get("content") or ""
+                break
+
+    for m in messages:
+        role = m.get("role")
+        if role == "tool":
+            if m.get("tool_call_id") in expected:
+                out.append(m)
+                expected.discard(m["tool_call_id"])
+            continue  # drop orphan tool messages
+        if expected:  # a previous assistant's tool_calls was left unanswered
+            _demote_last_tool_call()
+            expected.clear()
+        if role == "assistant" and m.get("tool_calls"):
+            ids = [tc.get("id") for tc in m["tool_calls"] if tc.get("id")]
+            if len(ids) != len(m["tool_calls"]):  # missing ids -> unusable as tool_calls
+                out.append({"role": "assistant", "content": m.get("content") or ""})
+                continue
+            out.append(m)
+            expected = set(ids)
+            continue
+        out.append(m)
+
+    if expected:
+        _demote_last_tool_call()
+    return out
+
+
 async def run_agent_turn(
     session: AsyncSession,
     user: User,
@@ -79,7 +119,7 @@ async def run_agent_turn(
     final_text = ""
 
     for _ in range(_settings.agent_max_tool_iterations):
-        result = await complete(convo, tools=TOOL_SPECS, tool_choice="auto", max_tokens=1500)
+        result = await complete(_sanitize(convo), tools=TOOL_SPECS, tool_choice="auto", max_tokens=1500)
 
         if not result.has_tool_calls:
             final_text = result.text or ""
