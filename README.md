@@ -1,74 +1,81 @@
-# NextOffer
+# NextOffer — Job Search Intelligence Agent
 
-A mobile-friendly chat assistant that will maintain your job application tracker in Google Sheets.
+An LLM agent that keeps your job search organized:
 
-## Current milestone — Supabase authentication
+- **Job-link analyzer** — paste a LinkedIn / JobStreet / careers-page link (or the
+  description text) and get a normalized summary: company, title, location, and
+  requirements reduced to tokens like `Python`, `FastAPI`, `2+ years backend experience`,
+  `Bachelor's in CS or equivalent`.
+- **Gmail tracker** *(milestones 1–2)* — scans job-related mail, classifies each update
+  (applied / assessment / interview / rejection / offer / status), extracts company,
+  title, dates and next actions, and keeps a Google Sheet in sync.
 
-- Next.js chat and settings UI, with explicit preview behavior.
-- FastAPI health endpoint.
-- Email/password sign-up, sign-in, sign-out, cookie refresh, and server-verified page access.
-- No LLM calls, email access, automatic scans, or Sheets writes yet.
-- No application database tables yet; per-user database policies and backend token verification must be added before storing or exposing user data.
+It demonstrates: an agent loop with tool/function calling, structured output, information
+extraction, classification, conversation state/context management, and API integrations.
 
-## Run the frontend
+## Stack
 
-Use Node.js 24 LTS (recommended). Node 23 can emit dependency engine warnings.
+| Layer | Choice |
+|---|---|
+| Frontend | Next.js 16 (App Router), Auth.js / NextAuth v5 (email + password) |
+| Backend | FastAPI, hand-written agent loop |
+| LLM | GPT-5.6 Terra via **Microsoft Foundry** (Azure AI Foundry), OpenAI-compatible SDK |
+| Database | **Azure Database for PostgreSQL** (async SQLAlchemy + Alembic) |
+| Integrations | Google OAuth → Gmail + Sheets *(milestone 1)* |
+
+The browser only ever calls the Next.js app. `frontend/src/app/api/backend/[...path]`
+reads the NextAuth session, mints a short-lived HS256 token (shared `AUTH_SECRET`), and
+proxies to FastAPI, which verifies it per request.
+
+## Run the backend
+
+Requires Python 3.11+ and a reachable PostgreSQL database.
+
+```sh
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.lock.txt
+cp .env.example .env          # fill DATABASE_URL, AUTH_SECRET, FOUNDRY_*
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+Health check: http://localhost:8000/health · API docs: http://localhost:8000/docs
+
+Run the tests (SQLite, no external services):
+
+```sh
+pytest
+```
+
+## Run the frontend (another terminal)
+
+Use Node.js 24 LTS.
 
 ```sh
 cd frontend
 npm install
-cp .env.example .env.local
-# Fill in your Supabase URL and publishable key before starting.
+cp .env.example .env.local    # AUTH_SECRET must match the backend, set BACKEND_URL
 npm run dev
 ```
 
-Open http://localhost:3000.
-
-## Run the backend (another terminal)
-
-Requires Python 3.11 or newer.
-
-```sh
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.lock.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-Health check: http://localhost:8000/health. API documentation: http://localhost:8000/docs.
-The preview frontend does not call the backend yet.
+Open http://localhost:3000 — create an account, then paste a job link in Chat.
 
 ## Verify
 
 ```sh
-cd frontend
-npm run lint
-npm run build
+cd frontend && npm run lint && npm run build
+cd ../backend && pytest
 ```
 
-## Next milestones
+## Milestones
 
-1. Per-user database access policies and backend token verification.
-2. Google OAuth and spreadsheet selection.
-3. Validated agent extraction and application matching.
-4. Scheduled email scans, duplicate prevention, Sheets updates and review in chat.
-5. Railway deployment and multi-user validation.
+0. **Scaffold + job-link analyzer** — auth, agent loop, structured extraction, tracking. ✅
+1. Google OAuth, Gmail + Sheets connection, spreadsheet selection.
+2. Email-scan pipeline: classify + extract updates, match applications, sync the Sheet.
+3. Scheduled scans (Azure Container Apps job) + deployment.
 
-Never commit credentials. Root `.env.example` documents configuration as integrations are introduced.
+## Configuration
 
-## Supabase setup
-
-In Authentication → Providers, enable Email authentication. Keep email confirmation enabled.
-In Authentication → URL Configuration, set the local Site URL to `http://localhost:3000` and add `http://localhost:3000/auth/callback` to Redirect URLs. If using `127.0.0.1`, add `http://127.0.0.1:3000/auth/callback` too. Use the same host throughout registration and confirmation. Add your HTTPS production callback when deploying.
-
-The default confirmation email link works with the PKCE callback in `/auth/callback`; open it in the browser where you registered. Expired or cross-browser links show a retry message. Supabase email delivery limits and provider settings apply; configure production email delivery before inviting friends.
-
-Manual auth check:
-1. Visit `/` signed out: expect a redirect to `/login`. Repeat with `/settings`.
-2. Create an account, confirm your email, and sign in. Your email should appear in Settings.
-3. Refresh: you should remain signed in.
-4. Sign out from Settings, then revisit `/settings`: expect `/login`.
-5. Try an incorrect password: expect a clear error and no session.
-
-Authentication does not authorize Gmail access. The separate Google connection remains disabled. Do not expose secret/service-role keys through `NEXT_PUBLIC_` variables.
+`backend/.env` and `frontend/.env.local` are documented in the matching `.env.example`
+files. `AUTH_SECRET` must be identical in both. Never commit real secrets.

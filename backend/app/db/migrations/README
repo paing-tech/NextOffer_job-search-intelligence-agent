@@ -1,0 +1,6 @@
+Alembic migrations for NextOffer. Generate with:
+
+    alembic revision --autogenerate -m "message"
+    alembic upgrade head
+
+The database URL comes from app.config (DATABASE_URL env var).

@@ -1,5 +1,5 @@
 import Chat from '@/components/chat';
-import { requireUser } from '@/lib/supabase/require-user';
+import { requireUser } from '@/lib/session';
 
 export default async function ChatPage() {
   await requireUser();

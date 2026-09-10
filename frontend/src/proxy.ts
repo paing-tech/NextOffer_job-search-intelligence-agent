@@ -1,32 +1,27 @@
-import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
-export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
-  const client = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    { cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll(values) {
-        values.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        values.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-      },
-    } },
-  );
-  const { data, error } = await client.auth.getClaims();
-  if ((error || !data?.claims) && request.nextUrl.pathname !== '/login' && !request.nextUrl.pathname.startsWith('/auth/')) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.search = '';
-    const redirect = NextResponse.redirect(url);
-    response.cookies.getAll().forEach(cookie => redirect.cookies.set(cookie));
-    redirect.headers.set('Cache-Control', 'private, no-store');
-    return redirect;
+// Optimistic auth gate (reads the session cookie only). Real authorization
+// happens in the backend on every API call.
+export default auth((req) => {
+  const signedIn = Boolean(req.auth?.user);
+  const { pathname } = req.nextUrl;
+  const onLogin = pathname === "/login";
+
+  if (!signedIn && !onLogin) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
-  response.headers.set('Cache-Control', 'private, no-store');
-  return response;
-}
+  if (signedIn && onLogin) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+  return NextResponse.next();
+});
 
-export const config = { matcher: ['/', '/settings/:path*', '/login', '/auth/:path*'] };
+export const config = {
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};
