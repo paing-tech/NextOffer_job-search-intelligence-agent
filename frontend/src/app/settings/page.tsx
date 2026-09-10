@@ -5,7 +5,7 @@ export default async function SettingsPage() {
   const user = await requireUser();
   return (
     <main className="settings-page">
-      <div className="page-heading"><h1>Settings</h1></div>
+      <div className="page-heading"><h1>Profile</h1></div>
       <section className="settings-card"><div className="card-title"><h3><span>NextOffer account</span></h3><SignOut /></div><p className="account-email">{user.email}</p></section>
       <div className="settings-intro"><span className="eyebrow">MAKE IT YOURS</span><h2>A home for your job search.</h2><p>Connect your account and choose where your applications will live.</p></div>
       <section className="settings-card" aria-labelledby="google-title"><div className="card-title"><h3 id="google-title">01 <span>Google account</span></h3><span className="status">Not connected</span></div><p>Your Google connection will let NextOffer read application emails and update your selected spreadsheet.</p><button className="button primary" disabled>Connect Google</button><small>Gmail and Sheets authorization will be added in the next milestone.</small></section>
