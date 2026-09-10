@@ -10,8 +10,9 @@ export default auth((req) => {
 
   if (!signedIn && !onLogin) {
     const url = req.nextUrl.clone();
+    const target = req.nextUrl.pathname + req.nextUrl.search;
     url.pathname = "/login";
-    url.search = "";
+    url.search = target !== "/" ? `?callbackUrl=${encodeURIComponent(target)}` : "";
     return NextResponse.redirect(url);
   }
   if (signedIn && onLogin) {

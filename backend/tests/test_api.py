@@ -72,6 +72,28 @@ async def test_register_login_and_authed_route(client):
 
 
 @pytest.mark.asyncio
+async def test_create_application_endpoint(client):
+    reg = await client.post("/auth/register", json={"email": "a@example.com", "password": "hunter2hunter2"})
+    token = _token(reg.json()["id"], "a@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    made = await client.post(
+        "/applications", json={"company": "Acme", "job_title": "Backend Engineer", "status": "applied"}, headers=headers
+    )
+    assert made.status_code == 201
+    assert made.json()["created"] is True
+
+    again = await client.post(
+        "/applications", json={"company": "acme", "job_title": "backend engineer", "status": "interview"}, headers=headers
+    )
+    assert again.json()["created"] is False
+    assert again.json()["application"]["status"] == "interview"
+
+    listed = await client.get("/applications", headers=headers)
+    assert len(listed.json()["applications"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_scan_run_is_stubbed(client):
     reg = await client.post("/auth/register", json={"email": "s@example.com", "password": "hunter2hunter2"})
     token = _token(reg.json()["id"], "s@example.com")

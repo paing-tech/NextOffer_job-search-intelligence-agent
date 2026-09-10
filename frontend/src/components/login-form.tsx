@@ -1,12 +1,15 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 export function LoginForm() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const callbackUrl = useSearchParams().get('callbackUrl');
+  const destination = callbackUrl && callbackUrl.startsWith('/') ? callbackUrl : '/';
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,8 +38,7 @@ export function LoginForm() {
         return;
       }
       // Full navigation clears any previous user's in-memory chat and route cache.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- discard authenticated router state on account changes
-      window.location.assign('/');
+      window.location.assign(destination);
     } catch {
       setMessage('Unable to connect. Please check your connection and try again.');
     } finally {

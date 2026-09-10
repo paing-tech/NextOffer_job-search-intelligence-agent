@@ -5,14 +5,49 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.db.models import Application, User
+from app.db.models import Application, ApplicationSource, ApplicationStatus, User
 from app.db.session import get_session
-from app.services.applications import search_applications, serialize_application
+from app.services.applications import search_applications, serialize_application, upsert_application
 
 router = APIRouter(prefix="/applications", tags=["applications"])
+
+
+class UpsertApplicationRequest(BaseModel):
+    company: str = Field(min_length=1, max_length=255)
+    job_title: str = Field(min_length=1, max_length=255)
+    status: ApplicationStatus | None = None
+    next_action: str | None = None
+    job_posting_id: str | None = None
+
+
+@router.post("", status_code=201)
+async def create_or_update_application(
+    body: UpsertApplicationRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    posting_id = None
+    if body.job_posting_id:
+        try:
+            posting_id = uuid.UUID(body.job_posting_id)
+        except ValueError as exc:
+            raise HTTPException(400, "Invalid job_posting_id") from exc
+
+    app, created = await upsert_application(
+        session,
+        user_id=user.id,
+        company=body.company,
+        job_title=body.job_title,
+        status=body.status,
+        source=ApplicationSource.link if posting_id else ApplicationSource.manual,
+        next_action=body.next_action,
+        job_posting_id=posting_id,
+    )
+    return {"created": created, "application": serialize_application(app)}
 
 
 @router.get("")

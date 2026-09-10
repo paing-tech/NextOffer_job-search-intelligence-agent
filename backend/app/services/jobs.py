@@ -47,6 +47,7 @@ async def analyze_job(
     source_url = url
     platform = detect_platform(url) if url else "manual"
     raw_text = text
+    fetch_source = "pasted-text" if text else None
 
     if not raw_text and url:
         fetched = await fetch_posting(url)
@@ -63,6 +64,7 @@ async def analyze_job(
             }
         raw_text = fetched.text
         source_url = fetched.final_url or url
+        fetch_source = fetched.source
 
     extraction, usage = await extract_job_posting(raw_text or "", source_url)
 
@@ -88,4 +90,4 @@ async def analyze_job(
     session.add(posting)
     await session.flush()
 
-    return {"status": "ok", "job_posting": serialize_posting(posting)}
+    return {"status": "ok", "job_posting": serialize_posting(posting), "fetch_source": fetch_source}

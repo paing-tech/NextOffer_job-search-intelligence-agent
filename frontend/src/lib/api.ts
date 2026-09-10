@@ -30,6 +30,40 @@ export type Application = {
   last_update_at: string | null;
 };
 
+export type AnalyzeResult =
+  | { status: "ok"; job_posting: JobPosting; fetch_source: string | null }
+  | { status: "needs_paste"; platform: string; reason: string | null; message: string }
+  | { status: "error"; message: string };
+
+/** POST /api/backend/jobs/analyze — a job URL or pasted description text. */
+export async function analyzeJob(payload: { url?: string; text?: string }): Promise<AnalyzeResult> {
+  const res = await fetch("/api/backend/jobs/analyze", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    return { status: "error", message: detail.detail ?? `Request failed (${res.status}).` };
+  }
+  return (await res.json()) as AnalyzeResult;
+}
+
+/** POST /api/backend/applications — create or update a tracked application. */
+export async function trackApplication(payload: {
+  company: string;
+  job_title: string;
+  job_posting_id?: string;
+}): Promise<{ created: boolean; application: Application } | { error: string }> {
+  const res = await fetch("/api/backend/applications", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) return { error: `Request failed (${res.status}).` };
+  return res.json();
+}
+
 /** POST /api/backend/chat and yield parsed SSE events. */
 export async function* streamChat(
   message: string,
