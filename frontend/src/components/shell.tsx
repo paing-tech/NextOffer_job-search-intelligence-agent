@@ -31,10 +31,10 @@ function ProfileIcon() {
   );
 }
 
-const TABS: { href: string; label: string; Icon: ComponentType }[] = [
-  { href: "/applications", label: "Applications", Icon: BriefcaseIcon },
-  { href: "/", label: "Chat", Icon: ChatIcon },
-  { href: "/settings", label: "Profile", Icon: ProfileIcon },
+const TABS: { href: string; label: string; sectionLabel: string; Icon: ComponentType }[] = [
+  { href: "/applications", label: "Jobs", sectionLabel: "Applications", Icon: BriefcaseIcon },
+  { href: "/", label: "Chat", sectionLabel: "Chat", Icon: ChatIcon },
+  { href: "/settings", label: "Profile", sectionLabel: "Profile", Icon: ProfileIcon },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -49,7 +49,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Link href="/" className="brand" aria-label="NextOffer home">
           <span className="brand-mark">N</span>NextOffer<span className="brand-dot">.</span>
         </Link>
-        {active && <span className="topbar-section">{active.label}</span>}
+        {active && <span className="topbar-section">{active.sectionLabel}</span>}
       </header>
 
       <div className="content">{children}</div>
@@ -63,10 +63,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 className={isActive ? "navtab active" : "navtab"}
-                aria-label={label}
                 aria-current={isActive ? "page" : undefined}
               >
                 <Icon />
+                <span>{label}</span>
               </Link>
             );
           })}
