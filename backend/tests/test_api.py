@@ -72,6 +72,35 @@ async def test_register_login_and_authed_route(client):
 
 
 @pytest.mark.asyncio
+async def test_check_email_states(client):
+    fresh = await client.post("/auth/exists", json={"email": "new@example.com"})
+    assert fresh.json() == {"exists": False, "has_password": False}
+
+    await client.post("/auth/register", json={"email": "pw@example.com", "password": "hunter2hunter2"})
+    with_pw = await client.post("/auth/exists", json={"email": "PW@example.com"})
+    assert with_pw.json() == {"exists": True, "has_password": True}
+
+    await client.post("/auth/oauth-upsert", json={"email": "google-only@example.com"})
+    google_only = await client.post("/auth/exists", json={"email": "google-only@example.com"})
+    assert google_only.json() == {"exists": True, "has_password": False}
+
+
+@pytest.mark.asyncio
+async def test_oauth_upsert_creates_then_converges(client):
+    first = await client.post("/auth/oauth-upsert", json={"email": "Google@Example.com"})
+    assert first.status_code == 200
+    user_id = first.json()["id"]
+
+    again = await client.post("/auth/oauth-upsert", json={"email": "google@example.com"})
+    assert again.json()["id"] == user_id  # same email -> same account, no duplicate
+
+    # A pre-existing password account with the same email resolves to that same user.
+    reg = await client.post("/auth/register", json={"email": "both@example.com", "password": "hunter2hunter2"})
+    via_oauth = await client.post("/auth/oauth-upsert", json={"email": "both@example.com"})
+    assert via_oauth.json()["id"] == reg.json()["id"]
+
+
+@pytest.mark.asyncio
 async def test_create_application_endpoint(client):
     reg = await client.post("/auth/register", json={"email": "a@example.com", "password": "hunter2hunter2"})
     token = _token(reg.json()["id"], "a@example.com")
