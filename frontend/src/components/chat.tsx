@@ -4,8 +4,6 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { JobPostingCard } from "@/components/job-posting-card";
 import { streamChat, type JobPosting } from "@/lib/api";
 
-const suggestions = ["Analyze a job link", "Show my applications", "What can NextOffer do?"];
-
 type Message = {
   role: "user" | "assistant";
   content: string;
@@ -13,13 +11,16 @@ type Message = {
   pending?: boolean;
 };
 
+// Quick-message pills shown above the composer; tapping one fills the input.
+const QUICK_MESSAGES = [{ label: "Analyze Job", fill: "Analyze this job link: " }];
+
 export default function Chat() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const sessionId = useRef<string | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -68,23 +69,8 @@ export default function Chat() {
 
   return (
     <main className="chat-page">
-      <div className="page-heading"><h1>Chat</h1></div>
       <div className="conversation" role="log" aria-label="Conversation" aria-live="polite">
-        {messages.length === 0 ? (
-          <section className="welcome">
-            <div className="welcome-mark" aria-hidden="true">↗</div>
-            <span className="eyebrow">LESS ADMIN. MORE OPPORTUNITY.</span>
-            <h2>Make room for<br />your next offer.</h2>
-            <p>Paste a job link and I&apos;ll break it down, or ask about the roles you&apos;re tracking.</p>
-            <div className="suggestions">
-              {suggestions.map((s, i) => (
-                <button key={s} onClick={() => { setInput(s); inputRef.current?.focus(); }}>
-                  <span className="suggestion-number">0{i + 1}</span><span>{s}</span><span aria-hidden="true">↗</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : (
+        {messages.length > 0 && (
           <div className="messages">
             {messages.map((m, index) => (
               <article key={index} className={`message ${m.role}`}>
@@ -98,25 +84,33 @@ export default function Chat() {
         )}
       </div>
       <div className="composer-wrap">
-        <form className="composer" onSubmit={send}>
-          <label className="sr-only" htmlFor="message">Message NextOffer</label>
-          <textarea
-            ref={inputRef}
-            id="message"
-            rows={2}
-            maxLength={8000}
-            placeholder="Paste a job link or ask about your applications…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send(e);
-              }
-            }}
-          />
-          <div className="composer-actions">
-            <span>{busy ? status ?? "Working…" : "Connected to your NextOffer agent"}</span>
+        <div className="quick-actions">
+          {QUICK_MESSAGES.map((q) => (
+            <button
+              key={q.label}
+              type="button"
+              className="quick-pill"
+              onClick={() => {
+                setInput(q.fill);
+                inputRef.current?.focus();
+              }}
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
+        <form className="composer composer-dark composer-pill" onSubmit={send}>
+          <div className="composer-body">
+            <label className="sr-only" htmlFor="message">Message NextOffer</label>
+            <input
+              ref={inputRef}
+              id="message"
+              type="text"
+              maxLength={8000}
+              placeholder="Ask Agent"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+            />
             <button className="send-button" type="submit" disabled={!input.trim() || busy} aria-label="Send message">↑</button>
           </div>
         </form>
