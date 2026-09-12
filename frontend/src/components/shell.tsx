@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FilterAltIcon } from "@/components/icons/filter-alt-icon";
 import { BlocksIcon, type BlocksIconHandle } from "@/components/icons/blocks-icon";
 import { UserRoundIcon, type UserRoundIconHandle } from "@/components/icons/user-round-icon";
@@ -165,6 +165,36 @@ function AgentHistory() {
   );
 }
 
+// A tap that also triggers Link navigation doesn't reliably fire
+// pointerup/pointercancel afterward on mobile Safari — the "press" state
+// (whatever it drives) could get stuck enlarged until the next unrelated
+// touch. This hook is the fix: press-start also arms a timeout that force
+// -releases on its own, while a genuine release (if it does fire) clears
+// that timeout and releases immediately instead of waiting on it.
+function usePressState() {
+  const [pressed, setPressed] = useState(false);
+  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const start = useCallback(() => {
+    setPressed(true);
+    if (timeout.current) clearTimeout(timeout.current);
+    timeout.current = setTimeout(() => setPressed(false), 400);
+  }, []);
+  const end = useCallback(() => {
+    if (timeout.current) {
+      clearTimeout(timeout.current);
+      timeout.current = null;
+    }
+    setPressed(false);
+  }, []);
+
+  useEffect(() => () => {
+    if (timeout.current) clearTimeout(timeout.current);
+  }, []);
+
+  return { pressed, start, end };
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const libraryIconRef = useRef<BlocksIconHandle>(null);
@@ -178,12 +208,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
   // Held continuously (not a one-shot animation) for as long as the bar is
   // hovered or pressed/touched; scales up while true, eases back to whatever
   // navCompact says once released.
-  const [navActive, setNavActive] = useState(false);
-  // Which tab (by href) is currently hovered/pressed — the selected tab's
-  // glass pill only bulges past the bar's edges while it is the one being
-  // interacted with; otherwise it sits flush, matching its old flat size.
+  const bar = usePressState();
+  // Which tab (by href) is currently hovered/pressed — the sliding indicator
+  // only enlarges while it's the one being interacted with.
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
+  const tabPress = usePressState();
   const lastScrollY = useRef(0);
+
+  // The sliding indicator: measured off the active tab's real DOM position
+  // rather than living per-tab, so it can animate *between* two different
+  // elements' positions (a CSS pseudo-element scoped to one tab can't).
+  const tabRefs = useRef<Partial<Record<string, HTMLAnchorElement | null>>>({});
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+  const [sliding, setSliding] = useState(false);
+  const prevActiveHref = useRef<string | null>(null);
+  const slideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     lastScrollY.current = window.scrollY;
@@ -199,29 +238,69 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  if (pathname === "/login" || pathname.startsWith("/auth/")) return <>{children}</>;
-
-  function tabClassName(href: string, isActive: boolean) {
-    if (!isActive) return "navtab";
-    return hoveredTab === href ? "navtab active enlarged" : "navtab active";
-  }
-
-  function tabHoverHandlers(href: string) {
-    const clear = () => setHoveredTab((h) => (h === href ? null : h));
-    return {
-      onMouseEnter: () => setHoveredTab(href),
-      onMouseLeave: clear,
-      onPointerDown: () => setHoveredTab(href),
-      onPointerUp: clear,
-      onPointerCancel: clear,
-      onPointerLeave: clear,
-    };
-  }
-
   const isApplications = pathname.startsWith("/applications");
   const isLibrary = pathname.startsWith("/library");
   const isAgent = pathname === "/";
   const isProfile = pathname.startsWith("/settings");
+  const activeHref = isApplications ? "/applications" : isLibrary ? "/library" : isAgent ? "/" : isProfile ? "/settings" : null;
+
+  const measure = useCallback(() => {
+    const tabEl = activeHref ? tabRefs.current[activeHref] : null;
+    if (!tabEl) return;
+    // offsetLeft/offsetWidth are layout-space (relative to .bottomnav-inner,
+    // its offsetParent — it has position:relative) and unaffected by any
+    // transform:scale() currently applied to the bar (pressed/compact
+    // states). getBoundingClientRect() would return post-transform visual
+    // pixels instead, which — reapplied as this indicator's own translateX
+    // — get scaled *again* by the bar's transform, compounding into a
+    // misaligned pill whenever a scale happens to be active at tap time
+    // (which it usually is, since tapping a tab also triggers the bar's own
+    // press-scale). A small inset keeps adjacent pills from ever touching.
+    setIndicator({ left: tabEl.offsetLeft + 3, width: tabEl.offsetWidth - 6 });
+  }, [activeHref]);
+
+  useLayoutEffect(() => {
+    const isFirst = prevActiveHref.current === null;
+    prevActiveHref.current = activeHref;
+    measure();
+    if (!isFirst) {
+      setSliding(true);
+      if (slideTimeout.current) clearTimeout(slideTimeout.current);
+      slideTimeout.current = setTimeout(() => setSliding(false), 320);
+    }
+  }, [activeHref, measure]);
+
+  useEffect(() => {
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure]);
+
+  if (pathname === "/login" || pathname.startsWith("/auth/")) return <>{children}</>;
+
+  function tabHoverHandlers(href: string) {
+    return {
+      onMouseEnter: () => setHoveredTab(href),
+      onMouseLeave: () => setHoveredTab((h) => (h === href ? null : h)),
+      onPointerDown: () => {
+        setHoveredTab(href);
+        tabPress.start();
+      },
+      onPointerUp: () => {
+        setHoveredTab((h) => (h === href ? null : h));
+        tabPress.end();
+      },
+      onPointerCancel: () => {
+        setHoveredTab((h) => (h === href ? null : h));
+        tabPress.end();
+      },
+      onPointerLeave: () => {
+        setHoveredTab((h) => (h === href ? null : h));
+        tabPress.end();
+      },
+    };
+  }
+
+  const indicatorEnlarged = sliding || (tabPress.pressed && hoveredTab === activeHref);
 
   return (
     <div className="shell">
@@ -249,17 +328,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       <nav className="bottomnav" aria-label="Primary">
         <div
-          className={`bottomnav-inner${navActive ? " pressed" : navCompact ? " compact" : ""}`}
-          onMouseEnter={() => setNavActive(true)}
-          onMouseLeave={() => setNavActive(false)}
-          onPointerDown={() => setNavActive(true)}
-          onPointerUp={() => setNavActive(false)}
-          onPointerCancel={() => setNavActive(false)}
-          onPointerLeave={() => setNavActive(false)}
+          className={`bottomnav-inner${bar.pressed ? " pressed" : navCompact ? " compact" : ""}`}
+          onMouseEnter={bar.start}
+          onMouseLeave={bar.end}
+          onPointerDown={bar.start}
+          onPointerUp={bar.end}
+          onPointerCancel={bar.end}
+          onPointerLeave={bar.end}
         >
+          {indicator && (
+            <span
+              aria-hidden="true"
+              className={`nav-indicator${indicatorEnlarged ? " enlarged" : ""}`}
+              style={{ transform: `translateX(${indicator.left}px) scale(${indicatorEnlarged ? 1.15 : 1})`, width: indicator.width }}
+            />
+          )}
           <Link
             href="/applications"
-            className={tabClassName("/applications", isApplications)}
+            ref={(el) => {
+              tabRefs.current["/applications"] = el;
+            }}
+            className={isApplications ? "navtab active" : "navtab"}
             aria-current={isApplications ? "page" : undefined}
             {...tabHoverHandlers("/applications")}
           >
@@ -271,7 +360,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
               what plays it (via the imperative startAnimation handle). */}
           <Link
             href="/library"
-            className={tabClassName("/library", isLibrary)}
+            ref={(el) => {
+              tabRefs.current["/library"] = el;
+            }}
+            className={isLibrary ? "navtab active" : "navtab"}
             aria-current={isLibrary ? "page" : undefined}
             onClick={() => libraryIconRef.current?.startAnimation()}
             {...tabHoverHandlers("/library")}
@@ -281,7 +373,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/"
-            className={tabClassName("/", isAgent)}
+            ref={(el) => {
+              tabRefs.current["/"] = el;
+            }}
+            className={isAgent ? "navtab active" : "navtab"}
             aria-current={isAgent ? "page" : undefined}
             onClick={() => agentIconRef.current?.startAnimation()}
             {...tabHoverHandlers("/")}
@@ -291,7 +386,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/settings"
-            className={tabClassName("/settings", isProfile)}
+            ref={(el) => {
+              tabRefs.current["/settings"] = el;
+            }}
+            className={isProfile ? "navtab active" : "navtab"}
             aria-current={isProfile ? "page" : undefined}
             onClick={() => profileIconRef.current?.startAnimation()}
             {...tabHoverHandlers("/settings")}
