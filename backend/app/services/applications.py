@@ -17,6 +17,7 @@ from app.db.models import (
     ApplicationStatus,
     EventType,
 )
+from app.services.sheets_sync import sync_application
 
 
 def dedupe_key(company: str, job_title: str) -> str:
@@ -63,6 +64,7 @@ async def upsert_application(
     status: ApplicationStatus | None = None,
     source: ApplicationSource = ApplicationSource.manual,
     next_action: str | None = None,
+    next_action_due: datetime | None = None,
     job_posting_id: uuid.UUID | None = None,
     status_confidence: float | None = None,
     event: tuple[EventType, str] | None = None,
@@ -89,6 +91,8 @@ async def upsert_application(
 
     if next_action is not None:
         app.next_action = next_action
+    if next_action_due is not None:
+        app.next_action_due = next_action_due
     if job_posting_id is not None:
         app.job_posting_id = job_posting_id
     if status_confidence is not None:
@@ -104,6 +108,7 @@ async def upsert_application(
         session.add(ApplicationEvent(application_id=app.id, event_type=etype, summary=summary))
 
     await session.flush()
+    await sync_application(session, user_id=user_id, application=app)
     return app, created
 
 

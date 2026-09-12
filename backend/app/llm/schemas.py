@@ -8,6 +8,8 @@ the product spec wants requirements normalized to tokens like ``Python`` and
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -34,6 +36,23 @@ class JobPostingExtraction(BaseModel):
         description="Compact phrases, e.g. [\"Bachelor's in CS or equivalent\"]. Empty if not stated.",
     )
     summary: str | None = Field(None, description="2-3 sentence plain-language summary of the role.")
+
+
+EventTypeLiteral = Literal["applied", "assessment", "interview", "rejection", "offer", "status_update", "other"]
+
+
+class EmailClassification(BaseModel):
+    """Classification + extraction for one email, for the Gmail scan pipeline."""
+
+    job_related: bool = Field(..., description="True only if this is about a specific job application of the user's.")
+    event_type: EventTypeLiteral | None = Field(
+        None, description="The kind of update, or null if job_related is false."
+    )
+    company: str | None = Field(None, description="Hiring company, as named in the email.")
+    job_title: str | None = Field(None, description="Job title, as named in the email.")
+    next_action: str | None = Field(None, description="A short actionable next step, else null.")
+    next_action_due: str | None = Field(None, description="ISO date YYYY-MM-DD if a deadline is mentioned, else null.")
+    summary: str | None = Field(None, description="One plain-language sentence for the application timeline.")
 
 
 def strict_schema(model: type[BaseModel]) -> dict:

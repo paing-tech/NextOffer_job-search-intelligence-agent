@@ -1,16 +1,35 @@
-"""Email-scan endpoints — stubbed until milestone 2 (Gmail scan pipeline)."""
+"""Manual Gmail scan trigger, date-range bounded (a scheduled version — running
+this automatically in the background — is milestone 3)."""
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.db.models import ScanRun, User
 from app.db.session import get_session
+from app.integrations.google_oauth import GoogleNotConnected
+from app.services.scans import run_scan, serialize_scan_run
 
 router = APIRouter(prefix="/scans", tags=["scans"])
+
+
+class ScanRequest(BaseModel):
+    start_date: date
+    end_date: date | None = None  # None = up to now
+
+    @model_validator(mode="after")
+    def _range_is_sane(self):
+        if self.end_date and self.end_date < self.start_date:
+            raise ValueError("end_date must be on or after start_date")
+        if self.start_date > date.today():
+            raise ValueError("start_date can't be in the future")
+        return self
 
 
 @router.get("")
@@ -22,24 +41,17 @@ async def list_scans(
             select(ScanRun).where(ScanRun.user_id == user.id).order_by(ScanRun.started_at.desc()).limit(20)
         )
     )
-    return {
-        "scans": [
-            {
-                "id": str(r.id),
-                "status": r.status,
-                "started_at": r.started_at.isoformat() if r.started_at else None,
-                "messages_scanned": r.messages_scanned,
-                "events_created": r.events_created,
-                "applications_updated": r.applications_updated,
-            }
-            for r in runs
-        ]
-    }
+    return {"scans": [serialize_scan_run(r) for r in runs]}
 
 
 @router.post("/run")
-async def run_scan(user: User = Depends(get_current_user)) -> dict:
-    raise HTTPException(
-        status.HTTP_501_NOT_IMPLEMENTED,
-        "The Gmail scan pipeline lands in milestone 2 (needs a connected Google account).",
-    )
+async def run_scan_endpoint(
+    body: ScanRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    try:
+        run = await run_scan(session, user_id=user.id, start_date=body.start_date, end_date=body.end_date)
+    except GoogleNotConnected as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Connect Google in Settings first.") from exc
+    return serialize_scan_run(run)

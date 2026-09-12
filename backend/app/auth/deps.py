@@ -48,3 +48,18 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
     return user
+
+
+def decode_state_token(token: str) -> uuid.UUID:
+    """Verify the short-lived HS256 token used as the Google OAuth `state` param.
+
+    Same shape as the bearer token above (minted by the frontend's
+    ``mintBackendToken``), just carried through Google's redirect instead of an
+    Authorization header — there is no request the browser sends with a header
+    on an OAuth callback, so the state param is how we know which user this is.
+    """
+    try:
+        claims = jwt.decode(token, _settings.auth_secret, algorithms=["HS256"])
+        return uuid.UUID(str(claims["sub"]))
+    except (jwt.PyJWTError, KeyError, ValueError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid or expired state: {exc}") from exc

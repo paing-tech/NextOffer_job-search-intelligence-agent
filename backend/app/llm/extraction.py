@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.llm.client import complete
-from app.llm.schemas import JobPostingExtraction, strict_schema
+from app.llm.schemas import EmailClassification, JobPostingExtraction, strict_schema
 
 _JOB_SYSTEM = (
     "You extract structured data from job postings for a job-search tracker. "
@@ -33,3 +33,31 @@ async def extract_job_posting(text: str, source_url: str | None = None) -> tuple
     if result.parsed is None:
         raise ValueError("Model did not return valid structured output for the job posting.")
     return JobPostingExtraction.model_validate(result.parsed), result.usage
+
+
+_EMAIL_SYSTEM = (
+    "You classify one email for a job-search tracker. Decide if it concerns a specific job "
+    "application of the recipient's — not a job board digest, newsletter, or unrelated mail.\n\n"
+    "If job_related: pick event_type — 'applied' (application confirmation), 'assessment' "
+    "(test/task request), 'interview' (interview scheduling or invite), 'rejection', 'offer', "
+    "'status_update' (any other concrete progress signal), or 'other' (job-related but no clear "
+    "status signal, e.g. a recruiter follow-up). Extract company and job_title exactly as named. "
+    "next_action is a short actionable step for the candidate, else null. next_action_due is an "
+    "ISO date only if a specific deadline/date is stated, else null. summary is one plain sentence.\n\n"
+    "If not job_related, set job_related to false and leave every other field null."
+)
+
+
+async def classify_email(*, subject: str, sender: str, date: str, body_text: str) -> tuple[EmailClassification, dict]:
+    user = f"From: {sender}\nDate: {date}\nSubject: {subject}\n\n{body_text}"
+    result = await complete(
+        messages=[
+            {"role": "system", "content": _EMAIL_SYSTEM},
+            {"role": "user", "content": user[:16000]},
+        ],
+        response_schema=strict_schema(EmailClassification),
+        max_tokens=700,
+    )
+    if result.parsed is None:
+        raise ValueError("Model did not return valid structured output for the email.")
+    return EmailClassification.model_validate(result.parsed), result.usage

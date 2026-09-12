@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Application, ApplicationSource, ApplicationStatus
+from app.integrations.google_oauth import GoogleNotConnected
 from app.services.applications import search_applications, serialize_application, upsert_application
 from app.services.jobs import analyze_job
+from app.services.scans import run_scan, serialize_scan_run
 
 TOOL_SPECS: list[dict] = [
     {
@@ -80,8 +83,22 @@ TOOL_SPECS: list[dict] = [
         "type": "function",
         "function": {
             "name": "run_email_scan",
-            "description": "Scan the user's Gmail for job-application updates (requires a connected Google account).",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "description": (
+                "Scan the user's Gmail for job-application updates within a date range and sync them to "
+                "the tracker (requires a connected Google account)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string", "description": "ISO date YYYY-MM-DD to scan from."},
+                    "end_date": {
+                        "type": "string",
+                        "description": "ISO date YYYY-MM-DD to scan through; omit to scan up to today.",
+                    },
+                },
+                "required": ["start_date"],
+                "additionalProperties": False,
+            },
         },
     },
 ]
@@ -130,9 +147,20 @@ async def run_tool(name: str, args: dict, ctx: ToolContext) -> dict:
         return {"created": created, "application": serialize_application(app)}
 
     if name == "run_email_scan":
-        return {
-            "status": "unavailable",
-            "message": "Gmail scanning arrives in milestone 1 — connect Google in Settings first.",
-        }
+        try:
+            start = date.fromisoformat(args["start_date"])
+        except (KeyError, ValueError):
+            return {"error": "start_date must be an ISO date (YYYY-MM-DD)."}
+        end = None
+        if args.get("end_date"):
+            try:
+                end = date.fromisoformat(args["end_date"])
+            except ValueError:
+                return {"error": "end_date must be an ISO date (YYYY-MM-DD)."}
+        try:
+            run = await run_scan(ctx.session, user_id=ctx.user_id, start_date=start, end_date=end)
+        except GoogleNotConnected:
+            return {"status": "unavailable", "message": "Connect Google in Settings first."}
+        return serialize_scan_run(run)
 
     return {"error": f"unknown tool {name}"}

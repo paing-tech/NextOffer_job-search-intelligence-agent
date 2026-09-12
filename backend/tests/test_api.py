@@ -5,12 +5,14 @@ import uuid
 import jwt
 import pytest
 import pytest_asyncio
+from cryptography.fernet import Fernet
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import get_settings
 from app.db.models import Base
 from app.db.session import get_session
+from app.integrations import google_oauth
 from app.main import app
 
 SECRET = get_settings().auth_secret
@@ -123,8 +125,125 @@ async def test_create_application_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_scan_run_is_stubbed(client):
+async def test_google_status_not_connected(client):
+    reg = await client.post("/auth/register", json={"email": "g1@example.com", "password": "hunter2hunter2"})
+    token = _token(reg.json()["id"], "g1@example.com")
+    resp = await client.get("/google/status", headers={"Authorization": f"Bearer {token}"})
+    assert resp.json() == {"connected": False}
+
+
+@pytest.mark.asyncio
+async def test_google_authorize_redirects_to_google(client):
+    reg = await client.post("/auth/register", json={"email": "g2@example.com", "password": "hunter2hunter2"})
+    state = _token(reg.json()["id"], "g2@example.com")
+    resp = await client.get(f"/google/authorize?state={state}", follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"].startswith("https://accounts.google.com/o/oauth2/v2/auth")
+    assert "gmail.readonly" in resp.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_google_authorize_rejects_bad_state(client):
+    resp = await client.get("/google/authorize?state=garbage", follow_redirects=False)
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_google_callback_missing_code_redirects_with_error(client):
+    resp = await client.get("/google/callback", follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert "google=error" in resp.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_google_callback_success_then_disconnect(client, monkeypatch):
+    from app.routers import google as google_router
+
+    monkeypatch.setattr(google_oauth._settings, "token_encryption_key", Fernet.generate_key().decode())
+    google_oauth._fernet.cache_clear()
+
+    reg = await client.post("/auth/register", json={"email": "g3@example.com", "password": "hunter2hunter2"})
+    state = _token(reg.json()["id"], "g3@example.com")
+    headers = {"Authorization": f"Bearer {state}"}
+
+    async def fake_exchange(code):
+        assert code == "abc"
+        return {"access_token": "a1", "refresh_token": "r1", "expires_in": 3600, "scope": "x"}
+
+    monkeypatch.setattr(google_router, "exchange_code", fake_exchange)
+
+    callback = await client.get(f"/google/callback?code=abc&state={state}", follow_redirects=False)
+    assert callback.status_code in (302, 307)
+    assert "google=connected" in callback.headers["location"]
+
+    status = await client.get("/google/status", headers=headers)
+    assert status.json()["connected"] is True
+
+    disconnected = await client.delete("/google/connection", headers=headers)
+    assert disconnected.json() == {"connected": False}
+    status_after = await client.get("/google/status", headers=headers)
+    assert status_after.json() == {"connected": False}
+
+    google_oauth._fernet.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_create_spreadsheet_requires_connection(client):
+    reg = await client.post("/auth/register", json={"email": "sheet1@example.com", "password": "hunter2hunter2"})
+    token = _token(reg.json()["id"], "sheet1@example.com")
+    resp = await client.post("/google/spreadsheet", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_spreadsheet_after_connecting(client, monkeypatch):
+    from app.routers import google as google_router
+
+    monkeypatch.setattr(google_oauth._settings, "token_encryption_key", Fernet.generate_key().decode())
+    google_oauth._fernet.cache_clear()
+
+    reg = await client.post("/auth/register", json={"email": "sheet2@example.com", "password": "hunter2hunter2"})
+    state = _token(reg.json()["id"], "sheet2@example.com")
+    headers = {"Authorization": f"Bearer {state}"}
+
+    async def fake_exchange(code):
+        return {"access_token": "a1", "refresh_token": "r1", "expires_in": 3600, "scope": "x"}
+
+    monkeypatch.setattr(google_router, "exchange_code", fake_exchange)
+    await client.get(f"/google/callback?code=abc&state={state}", follow_redirects=False)
+
+    async def fake_create(access_token):
+        assert access_token == "a1"
+        return {"id": "sheet123", "url": "https://docs.google.com/spreadsheets/d/sheet123/edit"}
+
+    monkeypatch.setattr(google_router, "create_tracker_spreadsheet", fake_create)
+    resp = await client.post("/google/spreadsheet", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"spreadsheet_id": "sheet123", "url": "https://docs.google.com/spreadsheets/d/sheet123/edit"}
+
+    status_resp = await client.get("/google/status", headers=headers)
+    assert status_resp.json()["spreadsheet_id"] == "sheet123"
+    assert status_resp.json()["spreadsheet_url"] == "https://docs.google.com/spreadsheets/d/sheet123/edit"
+
+    google_oauth._fernet.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_scan_run_requires_google_connection(client):
     reg = await client.post("/auth/register", json={"email": "s@example.com", "password": "hunter2hunter2"})
     token = _token(reg.json()["id"], "s@example.com")
-    resp = await client.post("/scans/run", headers={"Authorization": f"Bearer {token}"})
-    assert resp.status_code == 501
+    resp = await client.post(
+        "/scans/run", json={"start_date": "2026-01-01"}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_scan_run_rejects_bad_date_range(client):
+    reg = await client.post("/auth/register", json={"email": "s2@example.com", "password": "hunter2hunter2"})
+    token = _token(reg.json()["id"], "s2@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.post(
+        "/scans/run", json={"start_date": "2026-01-10", "end_date": "2026-01-01"}, headers=headers
+    )
+    assert resp.status_code == 422
