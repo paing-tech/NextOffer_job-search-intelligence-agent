@@ -25,7 +25,9 @@ SYSTEM_PROMPT = (
     "  - When the user pastes a URL or a job description, call analyze_job_link.\n"
     "  - When analyze_job_link returns status 'needs_paste', ask the user to paste the job "
     "description text; do not guess the contents.\n"
-    "  - Only call upsert_application when the user clearly wants something tracked or changed.\n"
+    "  - Only call upsert_application when the user clearly wants something tracked or changed. If they "
+    "want to track a job you just analyzed, pass that job_posting_id so salary/requirements/platform "
+    "carry over automatically.\n"
     "  - Be concise. Present job details as short bullet lists. Never invent facts not in tool output."
 )
 

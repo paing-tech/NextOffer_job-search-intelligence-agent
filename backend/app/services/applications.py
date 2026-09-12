@@ -16,8 +16,22 @@ from app.db.models import (
     ApplicationSource,
     ApplicationStatus,
     EventType,
+    JobPosting,
 )
+from app.services.formatting import format_requirements
 from app.services.sheets_sync import sync_application
+
+
+async def fields_from_job_posting(session: AsyncSession, job_posting_id: uuid.UUID) -> dict:
+    """salary/requirements/platform to seed onto an Application when tracking a posting."""
+    posting = await session.get(JobPosting, job_posting_id)
+    if posting is None:
+        return {}
+    return {
+        "salary": posting.salary_text,
+        "requirements": format_requirements(posting.skills, posting.experience_requirements),
+        "platform": posting.source_platform,
+    }
 
 
 def dedupe_key(company: str, job_title: str) -> str:
@@ -38,6 +52,9 @@ def serialize_application(app: Application, *, include_events: bool = False) -> 
         "source": app.source.value,
         "next_action": app.next_action,
         "next_action_due": app.next_action_due.isoformat() if app.next_action_due else None,
+        "salary": app.salary,
+        "requirements": app.requirements,
+        "platform": app.platform,
         "job_posting_id": str(app.job_posting_id) if app.job_posting_id else None,
         "first_seen_at": app.first_seen_at.isoformat() if app.first_seen_at else None,
         "last_update_at": app.last_update_at.isoformat() if app.last_update_at else None,
@@ -66,6 +83,9 @@ async def upsert_application(
     next_action: str | None = None,
     next_action_due: datetime | None = None,
     job_posting_id: uuid.UUID | None = None,
+    salary: str | None = None,
+    requirements: str | None = None,
+    platform: str | None = None,
     status_confidence: float | None = None,
     event: tuple[EventType, str] | None = None,
 ) -> tuple[Application, bool]:
@@ -83,7 +103,7 @@ async def upsert_application(
         company=company.strip(),
         job_title=job_title.strip(),
         dedupe_key=key,
-        status=status or ApplicationStatus.discovered,
+        status=status or ApplicationStatus.saved,
         source=source,
     )
     if created:
@@ -95,6 +115,12 @@ async def upsert_application(
         app.next_action_due = next_action_due
     if job_posting_id is not None:
         app.job_posting_id = job_posting_id
+    if salary is not None:
+        app.salary = salary
+    if requirements is not None:
+        app.requirements = requirements
+    if platform is not None:
+        app.platform = platform
     if status_confidence is not None:
         app.status_confidence = status_confidence
     # Only move status forward (or to a terminal state); never regress interview -> applied.

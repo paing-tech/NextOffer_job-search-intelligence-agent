@@ -27,8 +27,14 @@ export type Application = {
   job_title: string;
   status: string;
   next_action: string | null;
+  salary: string | null;
+  requirements: string | null;
+  platform: string | null;
+  first_seen_at: string | null;
   last_update_at: string | null;
 };
+
+export type ApplicationDetail = Application & { job_posting?: JobPosting };
 
 export type AnalyzeResult =
   | { status: "ok"; job_posting: JobPosting; fetch_source: string | null }
@@ -105,4 +111,10 @@ export async function listApplications(): Promise<Application[]> {
   if (!res.ok) return [];
   const data = (await res.json()) as { applications: Application[] };
   return data.applications;
+}
+
+export async function getApplication(id: string): Promise<ApplicationDetail | null> {
+  const res = await fetch(`/api/backend/applications/${id}`, { headers: { accept: "application/json" } });
+  if (!res.ok) return null;
+  return (await res.json()) as ApplicationDetail;
 }

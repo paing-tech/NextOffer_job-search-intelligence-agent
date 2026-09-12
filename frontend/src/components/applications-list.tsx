@@ -3,21 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { listApplications, type Application } from "@/lib/api";
-
-const STATUS_LABEL: Record<string, string> = {
-  discovered: "Discovered",
-  applied: "Applied",
-  assessment: "Assessment",
-  interview: "Interview",
-  offer: "Offer",
-  rejected: "Rejected",
-  withdrawn: "Withdrawn",
-  ghosted: "Ghosted",
-};
+import { ApplicationCardBody } from "@/components/application-card";
+import { ApplicationModal } from "@/components/application-modal";
 
 export function ApplicationsList() {
   const [apps, setApps] = useState<Application[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     listApplications()
@@ -40,19 +32,17 @@ export function ApplicationsList() {
   }
 
   return (
-    <ul className="apps-list">
-      {apps.map((a) => (
-        <li key={a.id} className="app-row">
-          <div className="app-row-main">
-            <p className="app-title">{a.job_title}</p>
-            <p className="app-company">{a.company}</p>
-            {a.next_action && <p className="app-next">Next: {a.next_action}</p>}
-          </div>
-          <span className="app-status" data-status={a.status}>
-            {STATUS_LABEL[a.status] ?? a.status}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="apps-list">
+        {apps.map((a) => (
+          <li key={a.id}>
+            <button type="button" className="app-card" onClick={() => setOpenId(a.id)}>
+              <ApplicationCardBody a={a} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {openId && <ApplicationModal applicationId={openId} onClose={() => setOpenId(null)} />}
+    </>
   );
 }

@@ -34,6 +34,14 @@ def _patch_client(monkeypatch, responses):
     monkeypatch.setattr(sheets.httpx, "AsyncClient", lambda *a, **k: _FakeAsyncClient(responses))
 
 
+def test_header_row_matches_last_col():
+    assert len(sheets.HEADER_ROW) == 9
+    assert sheets.HEADER_ROW == [
+        "Date", "Job Title", "Company", "Salary", "Requirements", "Status", "Platform", "Next Action", "Last Updated",
+    ]
+    assert sheets.LAST_COL == "I"
+
+
 async def test_create_tracker_spreadsheet(monkeypatch):
     _patch_client(monkeypatch, [_FakeResponse(200, {"spreadsheetId": "sheet123"}), _FakeResponse(200, {})])
     result = await sheets.create_tracker_spreadsheet("token")

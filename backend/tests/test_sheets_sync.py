@@ -40,20 +40,33 @@ async def test_sync_noop_without_spreadsheet(session, user):
 async def test_sync_appends_new_row(session, user, monkeypatch):
     session.add(GoogleConnection(user_id=user.id, encrypted_refresh_token="x", spreadsheet_id="sheet1"))
     app = _new_application(user.id)
+    app.salary = "$5,000/mo"
+    app.requirements = "Python, FastAPI (2+ years)"
+    app.platform = "linkedin"
     session.add(app)
     await session.flush()
 
     monkeypatch.setattr(sheets_sync, "get_valid_access_token", _async_return("token"))
+    captured = {}
 
     async def fake_append(access_token, spreadsheet_id, row):
         assert access_token == "token"
         assert spreadsheet_id == "sheet1"
+        captured["row"] = row
         return 7
 
     monkeypatch.setattr(sheets_sync, "append_row", fake_append)
 
     await sheets_sync.sync_application(session, user_id=user.id, application=app)
     assert app.sheet_row == 7
+    # Column order must match integrations.sheets.HEADER_ROW.
+    date, job_title, company, salary, requirements, status, platform, next_action, updated = captured["row"]
+    assert job_title == "Backend Engineer"
+    assert company == "Acme"
+    assert salary == "$5,000/mo"
+    assert requirements == "Python, FastAPI (2+ years)"
+    assert status == "Applied"
+    assert platform == "LinkedIn"
 
 
 async def test_sync_updates_existing_row(session, user, monkeypatch):

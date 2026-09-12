@@ -1,4 +1,6 @@
+from app.integrations import jobfetch
 from app.integrations.jobfetch import (
+    FetchResult,
     _extract_main_text,
     _jobposting_to_text,
     _jsonld_jobposting,
@@ -7,6 +9,7 @@ from app.integrations.jobfetch import (
     _next_data_text,
     _seek_job_id,
     detect_platform,
+    fetch_posting,
 )
 
 
@@ -95,3 +98,52 @@ def test_next_data_text():
     html = f'<script id="__NEXT_DATA__" type="application/json">{__import__("json").dumps(payload)}</script>'
     text = _next_data_text(html)
     assert text and "Title: Data Engineer" in text and "Globex" in text and "Kuala Lumpur" in text
+
+
+def test_fetch_result_strips_nul_bytes():
+    # Postgres rejects NUL bytes outright; this is the single choke point every
+    # fetch strategy's text passes through.
+    result = FetchResult("generic", "before\x00after", False)
+    assert result.text == "beforeafter"
+
+
+class _FakeResponse:
+    def __init__(self, status_code, text="", headers=None, url="https://example.com/x"):
+        self.status_code = status_code
+        self.text = text
+        self.headers = headers or {}
+        self.url = url
+
+
+class _FakeAsyncClient:
+    def __init__(self, response):
+        self._response = response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, url, **kwargs):
+        return self._response
+
+    async def post(self, url, **kwargs):
+        raise AssertionError("not used in this test")
+
+
+async def test_fetch_posting_refuses_non_html_content_type(monkeypatch):
+    # This is the exact bug: a tracking-pixel/icon image URL pulled out of an
+    # email must never be treated as a fetchable job posting page.
+    response = _FakeResponse(
+        200,
+        text="\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        headers={"content-type": "image/png"},
+        url="https://seekcdn.com/notifications/apac-mail/shared/job-applied-on-icon.png",
+    )
+    monkeypatch.setattr(jobfetch.httpx, "AsyncClient", lambda **kw: _FakeAsyncClient(response))
+
+    result = await fetch_posting("https://seekcdn.com/notifications/apac-mail/shared/job-applied-on-icon.png")
+    assert result.needs_paste is True
+    assert result.text == ""
+    assert "content-type" in result.reason

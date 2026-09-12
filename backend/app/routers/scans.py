@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.db.models import ScanRun, User
 from app.db.session import get_session
-from app.integrations.google_oauth import GoogleNotConnected
+from app.integrations.google_oauth import GoogleNotConnected, GoogleOAuthError
 from app.services.scans import run_scan, serialize_scan_run
 
 router = APIRouter(prefix="/scans", tags=["scans"])
@@ -57,4 +57,6 @@ async def run_scan_endpoint(
         )
     except GoogleNotConnected as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Connect Google in Settings first.") from exc
+    except GoogleOAuthError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     return serialize_scan_run(run)

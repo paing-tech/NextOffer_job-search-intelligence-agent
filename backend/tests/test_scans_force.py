@@ -24,7 +24,7 @@ async def test_force_rescans_and_updates_existing_row_in_place(session, user, mo
     classification = EmailClassification(job_related=True, event_type="applied", company="Acme", job_title="BE")
 
     async def fake_fetch_and_classify(access_token, message_id):
-        return message_id, None, classification, None
+        return message_id, None, classification, None, None
 
     monkeypatch.setattr(scans, "_fetch_and_classify", fake_fetch_and_classify)
 
@@ -48,7 +48,7 @@ async def test_without_force_already_seen_messages_are_skipped(session, user, mo
 
     async def fake_fetch_and_classify(access_token, message_id):
         called.append(message_id)
-        return message_id, None, None, None
+        return message_id, None, None, None, None
 
     monkeypatch.setattr(scans, "_fetch_and_classify", fake_fetch_and_classify)
 

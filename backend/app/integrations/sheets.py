@@ -10,7 +10,10 @@ import httpx
 
 SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets"
 SHEET_NAME = "Applications"
-HEADER_ROW = ["Company", "Job Title", "Status", "Next Action", "Last Updated", "Source"]
+HEADER_ROW = [
+    "Date", "Job Title", "Company", "Salary", "Requirements", "Status", "Platform", "Next Action", "Last Updated",
+]
+LAST_COL = "I"  # keep in sync with len(HEADER_ROW)
 
 
 class SheetsError(RuntimeError):
@@ -37,7 +40,7 @@ async def create_tracker_spreadsheet(access_token: str, *, title: str = "NextOff
         spreadsheet_id = resp.json()["spreadsheetId"]
 
         header = await client.put(
-            f"{SHEETS_API}/{spreadsheet_id}/values/{SHEET_NAME}!A1:F1",
+            f"{SHEETS_API}/{spreadsheet_id}/values/{SHEET_NAME}!A1:{LAST_COL}1",
             headers=_headers(access_token),
             params={"valueInputOption": "USER_ENTERED"},
             json={"values": [HEADER_ROW]},
@@ -52,7 +55,7 @@ async def append_row(access_token: str, spreadsheet_id: str, row: list[str]) -> 
     """Append one row; returns its 1-indexed row number for later updates."""
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
-            f"{SHEETS_API}/{spreadsheet_id}/values/{SHEET_NAME}!A:F:append",
+            f"{SHEETS_API}/{spreadsheet_id}/values/{SHEET_NAME}!A:{LAST_COL}:append",
             headers=_headers(access_token),
             params={"valueInputOption": "USER_ENTERED", "insertDataOption": "INSERT_ROWS"},
             json={"values": [row]},
@@ -68,7 +71,7 @@ async def append_row(access_token: str, spreadsheet_id: str, row: list[str]) -> 
 async def update_row(access_token: str, spreadsheet_id: str, row_number: int, row: list[str]) -> None:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.put(
-            f"{SHEETS_API}/{spreadsheet_id}/values/{SHEET_NAME}!A{row_number}:F{row_number}",
+            f"{SHEETS_API}/{spreadsheet_id}/values/{SHEET_NAME}!A{row_number}:{LAST_COL}{row_number}",
             headers=_headers(access_token),
             params={"valueInputOption": "USER_ENTERED"},
             json={"values": [row]},

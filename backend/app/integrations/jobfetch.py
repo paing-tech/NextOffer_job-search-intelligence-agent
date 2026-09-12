@@ -81,6 +81,14 @@ class FetchResult:
     final_url: str | None = None
     source: str | None = None  # which strategy produced the text
 
+    def __post_init__(self) -> None:
+        # A single safety net regardless of which strategy produced `text`:
+        # Postgres rejects NUL bytes in text columns outright, and they can
+        # show up if a URL turns out to serve binary content (an image, a
+        # tracking pixel) that gets decoded as text somewhere upstream.
+        if self.text:
+            self.text = self.text.replace("\x00", "")
+
 
 def detect_platform(url: str) -> str:
     host = (urlparse(url).hostname or "").lower()
@@ -422,6 +430,17 @@ async def fetch_posting(url: str, *, timeout: float = 12.0) -> FetchResult:
             resp = await client.get(url)
         except httpx.HTTPError as exc:
             return FetchResult(platform, "", True, reason=f"Could not reach the page ({exc}).")
+
+        content_type = resp.headers.get("content-type", "").lower()
+        if content_type and not any(t in content_type for t in ("text/html", "application/xhtml", "text/plain")):
+            # Not a web page — an image, tracking pixel, PDF, etc. Decoding
+            # binary content as text can embed NUL bytes Postgres will reject,
+            # and there's nothing extractable here regardless.
+            return FetchResult(
+                platform, "", True,
+                reason=f"That link isn't a web page (content-type: {content_type}).",
+                final_url=str(resp.url),
+            )
 
         html = resp.text if resp.status_code < 400 else ""
 

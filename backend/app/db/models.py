@@ -42,26 +42,44 @@ def _uuid_col() -> Mapped[uuid.UUID]:
 
 
 class ApplicationStatus(str, enum.Enum):
-    discovered = "discovered"
+    saved = "saved"
     applied = "applied"
-    assessment = "assessment"
+    in_progress = "in_progress"
     interview = "interview"
-    offer = "offer"
+    accepted = "accepted"
     rejected = "rejected"
-    withdrawn = "withdrawn"
-    ghosted = "ghosted"
 
 
 # Rough forward-progress ordering; used to decide whether an incoming signal is "newer".
+# accepted/rejected are both terminal (same rank) so a correction between them still applies.
 STATUS_RANK = {
-    ApplicationStatus.discovered: 0,
+    ApplicationStatus.saved: 0,
     ApplicationStatus.applied: 1,
-    ApplicationStatus.assessment: 2,
+    ApplicationStatus.in_progress: 2,
     ApplicationStatus.interview: 3,
-    ApplicationStatus.offer: 4,
-    ApplicationStatus.rejected: 5,
-    ApplicationStatus.withdrawn: 5,
-    ApplicationStatus.ghosted: 5,
+    ApplicationStatus.accepted: 4,
+    ApplicationStatus.rejected: 4,
+}
+
+STATUS_LABELS = {
+    ApplicationStatus.saved: "Saved",
+    ApplicationStatus.applied: "Applied",
+    ApplicationStatus.in_progress: "In Progress",
+    ApplicationStatus.interview: "Interview",
+    ApplicationStatus.accepted: "Accepted",
+    ApplicationStatus.rejected: "Rejected",
+}
+
+PLATFORM_LABELS = {
+    "linkedin": "LinkedIn",
+    "jobstreet": "JobStreet",
+    "seek": "SEEK",
+    "indeed": "Indeed",
+    "glassdoor": "Glassdoor",
+    "lever": "Lever",
+    "greenhouse": "Greenhouse",
+    "ashby": "Ashby",
+    "generic": "Other",
 }
 
 
@@ -140,7 +158,7 @@ class Application(Base):
     dedupe_key: Mapped[str] = mapped_column(String(255), index=True)
 
     status: Mapped[ApplicationStatus] = mapped_column(
-        Enum(ApplicationStatus, name="application_status"), default=ApplicationStatus.discovered
+        Enum(ApplicationStatus, name="application_status"), default=ApplicationStatus.saved
     )
     status_confidence: Mapped[float | None] = mapped_column(Float)
     source: Mapped[ApplicationSource] = mapped_column(
@@ -149,6 +167,12 @@ class Application(Base):
     next_action: Mapped[str | None] = mapped_column(Text)
     next_action_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sheet_row: Mapped[int | None] = mapped_column(Integer)
+
+    # Denormalized from the linked JobPosting at tracking time (email-sourced or
+    # manually-tracked applications with no posting simply leave these null).
+    salary: Mapped[str | None] = mapped_column(String(255))
+    requirements: Mapped[str | None] = mapped_column(Text)
+    platform: Mapped[str | None] = mapped_column(String(40))
 
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_update_at: Mapped[datetime] = mapped_column(

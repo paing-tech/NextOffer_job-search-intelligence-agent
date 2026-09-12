@@ -50,6 +50,14 @@ class EmailClassification(BaseModel):
     )
     company: str | None = Field(None, description="Hiring company, as named in the email.")
     job_title: str | None = Field(None, description="Job title, as named in the email.")
+    job_url: str | None = Field(
+        None,
+        description=(
+            "The URL of the job posting itself, if one is linked in the email (e.g. a 'view job', "
+            "'view application', or job-title link on a job board). Not a tracking/redirect link to "
+            "an unrelated page. Null if no such link is present."
+        ),
+    )
     next_action: str | None = Field(None, description="A short actionable next step, else null.")
     next_action_due: str | None = Field(None, description="ISO date YYYY-MM-DD if a deadline is mentioned, else null.")
     summary: str | None = Field(None, description="One plain-language sentence for the application timeline.")

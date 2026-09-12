@@ -125,6 +125,37 @@ async def test_create_application_endpoint(client):
 
 
 @pytest.mark.asyncio
+async def test_get_application_includes_linked_job_posting(client, monkeypatch):
+    from app.llm.schemas import JobPostingExtraction
+    from app.services import jobs as jobs_service
+
+    async def fake_extract(text, source_url=None):
+        return (
+            JobPostingExtraction(company="Acme", title="Backend Engineer", skills=["Python", "FastAPI"], summary="Build things."),
+            {},
+        )
+
+    monkeypatch.setattr(jobs_service, "extract_job_posting", fake_extract)
+
+    reg = await client.post("/auth/register", json={"email": "b@example.com", "password": "hunter2hunter2"})
+    headers = {"Authorization": f"Bearer {_token(reg.json()['id'], 'b@example.com')}"}
+
+    analyzed = await client.post("/jobs/analyze", json={"text": "a" * 60}, headers=headers)
+    posting_id = analyzed.json()["job_posting"]["id"]
+
+    made = await client.post(
+        "/applications",
+        json={"company": "Acme", "job_title": "Backend Engineer", "job_posting_id": posting_id},
+        headers=headers,
+    )
+    app_id = made.json()["application"]["id"]
+
+    detail = await client.get(f"/applications/{app_id}", headers=headers)
+    assert detail.json()["job_posting"]["summary"] == "Build things."
+    assert detail.json()["job_posting"]["skills"] == ["Python", "FastAPI"]
+
+
+@pytest.mark.asyncio
 async def test_google_status_not_connected(client):
     reg = await client.post("/auth/register", json={"email": "g1@example.com", "password": "hunter2hunter2"})
     token = _token(reg.json()["id"], "g1@example.com")
@@ -219,7 +250,11 @@ async def test_create_spreadsheet_after_connecting(client, monkeypatch):
     monkeypatch.setattr(google_router, "create_tracker_spreadsheet", fake_create)
     resp = await client.post("/google/spreadsheet", headers=headers)
     assert resp.status_code == 200
-    assert resp.json() == {"spreadsheet_id": "sheet123", "url": "https://docs.google.com/spreadsheets/d/sheet123/edit"}
+    assert resp.json() == {
+        "spreadsheet_id": "sheet123",
+        "url": "https://docs.google.com/spreadsheets/d/sheet123/edit",
+        "resynced": 0,
+    }
 
     status_resp = await client.get("/google/status", headers=headers)
     assert status_resp.json()["spreadsheet_id"] == "sheet123"

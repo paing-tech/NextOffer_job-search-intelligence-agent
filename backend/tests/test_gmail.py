@@ -38,6 +38,15 @@ def test_extract_body_text_falls_back_to_html():
     assert "Only" in text and "html" in text and "<b>" not in text
 
 
+def test_extract_body_text_preserves_links_in_html_only_emails():
+    # HTML-only emails (common for job-platform confirmations) would otherwise
+    # silently lose their job link, which the classifier needs to find.
+    html = '<p>Your application for <a href="https://sg.jobstreet.com/job/123">Backend Engineer</a> was submitted.</p>'
+    text = gmail.extract_body_text({"mimeType": "text/html", "body": {"data": _b64(html)}})
+    assert "https://sg.jobstreet.com/job/123" in text
+    assert "Backend Engineer" in text
+
+
 def test_extract_body_text_nested_parts():
     payload = {
         "mimeType": "multipart/mixed",

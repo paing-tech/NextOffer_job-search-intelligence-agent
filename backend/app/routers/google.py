@@ -27,6 +27,7 @@ from app.integrations.google_oauth import (
     save_connection,
 )
 from app.integrations.sheets import SheetsError, create_tracker_spreadsheet
+from app.services.sheets_sync import resync_all
 
 router = APIRouter(prefix="/google", tags=["google"])
 _settings = get_settings()
@@ -59,11 +60,12 @@ async def create_spreadsheet(
     try:
         access_token = await get_valid_access_token(session, user.id)
         result = await create_tracker_spreadsheet(access_token)
-    except (GoogleNotConnected, SheetsError) as exc:
+    except (GoogleNotConnected, GoogleOAuthError, SheetsError) as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     conn.spreadsheet_id = result["id"]
     await session.flush()
-    return {"spreadsheet_id": result["id"], "url": result["url"]}
+    resynced = await resync_all(session, user_id=user.id)
+    return {"spreadsheet_id": result["id"], "url": result["url"], "resynced": resynced}
 
 
 @router.get("/authorize")

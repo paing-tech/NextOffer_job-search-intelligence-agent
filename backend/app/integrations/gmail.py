@@ -75,14 +75,26 @@ def _walk_parts(payload: dict) -> tuple[str | None, str | None]:
     return plain, html
 
 
+def _html_to_text_with_links(html: str) -> str:
+    """Plain .get_text() silently drops every href — and most job-platform
+    emails (application confirmations, etc.) are HTML-only with the one thing
+    we actually need, the job link, living only in an <a href>. Inline it."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        label = a.get_text(strip=True)
+        a.replace_with(f"{label} ({href})" if label else f"({href})")
+    return soup.get_text("\n").strip()
+
+
 def extract_body_text(payload: dict) -> str:
     plain, html = _walk_parts(payload)
     if plain and plain.strip():
         return plain.strip()
     if html:
-        from bs4 import BeautifulSoup
-
-        return BeautifulSoup(html, "html.parser").get_text("\n").strip()
+        return _html_to_text_with_links(html)
     return ""
 
 

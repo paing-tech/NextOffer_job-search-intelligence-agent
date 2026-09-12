@@ -1,6 +1,6 @@
 import type { JobPosting } from "@/lib/api";
 
-function Chips({ label, items }: { label: string; items: string[] }) {
+export function Chips({ label, items }: { label: string; items: string[] }) {
   if (!items?.length) return null;
   return (
     <div className="jp-group">

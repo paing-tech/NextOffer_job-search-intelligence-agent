@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Application, ApplicationSource, ApplicationStatus
 from app.integrations.google_oauth import GoogleNotConnected
-from app.services.applications import search_applications, serialize_application, upsert_application
+from app.services.applications import (
+    fields_from_job_posting,
+    search_applications,
+    serialize_application,
+    upsert_application,
+)
 from app.services.jobs import analyze_job
 from app.services.scans import run_scan, serialize_scan_run
 
@@ -73,6 +78,13 @@ TOOL_SPECS: list[dict] = [
                     "job_title": {"type": "string"},
                     "status": {"type": "string", "enum": [s.value for s in ApplicationStatus]},
                     "next_action": {"type": "string"},
+                    "job_posting_id": {
+                        "type": "string",
+                        "description": (
+                            "The job_posting id from a prior analyze_job_link result, if this application "
+                            "is for that posting — fills in salary/requirements/platform automatically."
+                        ),
+                    },
                 },
                 "required": ["company", "job_title"],
                 "additionalProperties": False,
@@ -135,14 +147,24 @@ async def run_tool(name: str, args: dict, ctx: ToolContext) -> dict:
 
     if name == "upsert_application":
         status = args.get("status")
+        posting_id = None
+        if args.get("job_posting_id"):
+            try:
+                posting_id = uuid.UUID(str(args["job_posting_id"]))
+            except ValueError:
+                posting_id = None
+        derived = await fields_from_job_posting(ctx.session, posting_id) if posting_id else {}
+
         app, created = await upsert_application(
             ctx.session,
             user_id=ctx.user_id,
             company=args["company"],
             job_title=args["job_title"],
             status=ApplicationStatus(status) if status else None,
-            source=ApplicationSource.manual,
+            source=ApplicationSource.link if posting_id else ApplicationSource.manual,
             next_action=args.get("next_action"),
+            job_posting_id=posting_id,
+            **derived,
         )
         return {"created": created, "application": serialize_application(app)}
 

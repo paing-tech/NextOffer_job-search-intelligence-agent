@@ -9,9 +9,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.db.models import Application, ApplicationSource, ApplicationStatus, User
+from app.db.models import Application, ApplicationSource, ApplicationStatus, JobPosting, User
 from app.db.session import get_session
-from app.services.applications import search_applications, serialize_application, upsert_application
+from app.services.applications import (
+    fields_from_job_posting,
+    search_applications,
+    serialize_application,
+    upsert_application,
+)
+from app.services.jobs import serialize_posting
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -37,6 +43,8 @@ async def create_or_update_application(
         except ValueError as exc:
             raise HTTPException(400, "Invalid job_posting_id") from exc
 
+    derived = await fields_from_job_posting(session, posting_id) if posting_id else {}
+
     app, created = await upsert_application(
         session,
         user_id=user.id,
@@ -46,6 +54,7 @@ async def create_or_update_application(
         source=ApplicationSource.link if posting_id else ApplicationSource.manual,
         next_action=body.next_action,
         job_posting_id=posting_id,
+        **derived,
     )
     return {"created": created, "application": serialize_application(app)}
 
@@ -75,4 +84,11 @@ async def get_application(
     if app is None or app.user_id != user.id:
         raise HTTPException(404, "Not found")
     await session.refresh(app, ["events"])
-    return serialize_application(app, include_events=True)
+    data = serialize_application(app, include_events=True)
+
+    if app.job_posting_id:
+        posting = await session.get(JobPosting, app.job_posting_id)
+        if posting is not None:
+            data["job_posting"] = serialize_posting(posting)
+
+    return data

@@ -42,8 +42,15 @@ _EMAIL_SYSTEM = (
     "(test/task request), 'interview' (interview scheduling or invite), 'rejection', 'offer', "
     "'status_update' (any other concrete progress signal), or 'other' (job-related but no clear "
     "status signal, e.g. a recruiter follow-up). Extract company and job_title exactly as named. "
-    "next_action is a short actionable step for the candidate, else null. next_action_due is an "
-    "ISO date only if a specific deadline/date is stated, else null. summary is one plain sentence.\n\n"
+    "job_url is the link to the job posting page itself, if the email includes one — typically a "
+    "'view job' or job-title link, often shown in the text as 'label (https://...)'. It must be a "
+    "page a person would browse, ending in something like a job ID or slug (e.g. '/job/12345' or "
+    "'/jobs/view/...'). Never pick a logo, icon, tracking-pixel, unsubscribe, or preferences link — "
+    "those usually end in an image extension (.png/.gif/.jpg) or contain words like 'track', "
+    "'pixel', 'logo', 'icon', 'unsubscribe'. If no genuine job-posting link is present, use null — "
+    "never guess or reuse an unrelated URL from the email. next_action is a short actionable step for the "
+    "candidate, else null. next_action_due is an ISO date only if a specific deadline/date is stated, "
+    "else null. summary is one plain sentence.\n\n"
     "If not job_related, set job_related to false and leave every other field null."
 )
 

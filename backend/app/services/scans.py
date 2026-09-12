@@ -21,14 +21,16 @@ from app.integrations.google_oauth import get_valid_access_token
 from app.llm.extraction import classify_email
 from app.llm.schemas import EmailClassification
 from app.services.applications import upsert_application
+from app.services.formatting import format_requirements
+from app.services.jobs import JobFetchResult, fetch_and_extract, persist_posting
 
 _CONCURRENCY = 5
 
 EVENT_TYPE_TO_STATUS = {
     EventType.applied: ApplicationStatus.applied,
-    EventType.assessment: ApplicationStatus.assessment,
+    EventType.assessment: ApplicationStatus.in_progress,
     EventType.interview: ApplicationStatus.interview,
-    EventType.offer: ApplicationStatus.offer,
+    EventType.offer: ApplicationStatus.accepted,
     EventType.rejection: ApplicationStatus.rejected,
 }
 
@@ -57,24 +59,38 @@ def serialize_scan_run(run: ScanRun) -> dict:
 
 async def _fetch_and_classify(
     access_token: str, message_id: str
-) -> tuple[str, GmailMessage | None, EmailClassification | None, Exception | None]:
+) -> tuple[str, GmailMessage | None, EmailClassification | None, Exception | None, JobFetchResult | None]:
     try:
         msg = await get_message(access_token, message_id)
         if not msg.body_text.strip():
             print(f"[scan] {message_id} '{msg.subject[:60]}': empty body after extraction, skipping", flush=True)
-            return message_id, msg, None, None
+            return message_id, msg, None, None, None
         classification, _usage = await classify_email(
             subject=msg.subject, sender=msg.sender, date=msg.date, body_text=msg.body_text
         )
         print(
             f"[scan] {message_id} '{msg.subject[:60]}': job_related={classification.job_related} "
-            f"event_type={classification.event_type} company={classification.company!r}",
+            f"event_type={classification.event_type} company={classification.company!r} "
+            f"job_url={classification.job_url!r}",
             flush=True,
         )
-        return message_id, msg, classification, None
+
+        job_result: JobFetchResult | None = None
+        if classification.job_related and classification.job_url:
+            try:
+                outcome = await fetch_and_extract(classification.job_url)
+                if isinstance(outcome, JobFetchResult):
+                    job_result = outcome
+                    print(f"[scan] {message_id}: fetched linked posting via {outcome.fetch_source}", flush=True)
+                else:
+                    print(f"[scan] {message_id}: linked posting not fetchable ({outcome.get('reason')})", flush=True)
+            except Exception as exc:  # noqa: BLE001 - the email classification result still stands either way
+                print(f"[scan] {message_id}: job link fetch failed - {type(exc).__name__}: {exc}", flush=True)
+
+        return message_id, msg, classification, None, job_result
     except Exception as exc:  # noqa: BLE001 - one bad message must not sink the whole scan
         print(f"[scan] {message_id}: FAILED - {type(exc).__name__}: {exc}", flush=True)
-        return message_id, None, None, exc
+        return message_id, None, None, exc, None
 
 
 async def run_scan(
@@ -132,7 +148,7 @@ async def run_scan(
                     )
                 )
 
-        for message_id, _msg, classification, error in results:
+        for message_id, _msg, classification, error, job_result in results:
             run.messages_scanned += 1
             if error is not None or classification is None:
                 _record(message_id, "error", None)
@@ -140,23 +156,50 @@ async def run_scan(
 
             application_id = None
             if classification.job_related and classification.company and classification.job_title:
-                event_type = (
-                    EventType(classification.event_type)
-                    if classification.event_type in EventType.__members__
-                    else EventType.other
-                )
-                app, created = await upsert_application(
-                    session,
-                    user_id=user_id,
-                    company=classification.company,
-                    job_title=classification.job_title,
-                    status=EVENT_TYPE_TO_STATUS.get(event_type),
-                    source=ApplicationSource.email,
-                    next_action=classification.next_action,
-                    next_action_due=_parse_due_date(classification.next_action_due),
-                    event=(event_type, classification.summary),
-                )
-                application_id = app.id
+                try:
+                    # Isolated in its own SAVEPOINT: one message's DB write
+                    # failing (a bad encoding, an unexpected constraint, ...)
+                    # must not abort the whole scan's Postgres transaction and
+                    # lose every message already recorded before it.
+                    async with session.begin_nested():
+                        event_type = (
+                            EventType(classification.event_type)
+                            if classification.event_type in EventType.__members__
+                            else EventType.other
+                        )
+
+                        posting_id = salary = requirements = platform = None
+                        if job_result is not None:
+                            posting = persist_posting(session, user_id=user_id, result=job_result)
+                            await session.flush()
+                            posting_id = posting.id
+                            salary = job_result.extraction.salary_text
+                            requirements = format_requirements(
+                                job_result.extraction.skills, job_result.extraction.experience_requirements
+                            )
+                            platform = job_result.platform
+
+                        app, created = await upsert_application(
+                            session,
+                            user_id=user_id,
+                            company=classification.company,
+                            job_title=classification.job_title,
+                            status=EVENT_TYPE_TO_STATUS.get(event_type),
+                            source=ApplicationSource.email,
+                            next_action=classification.next_action,
+                            next_action_due=_parse_due_date(classification.next_action_due),
+                            job_posting_id=posting_id,
+                            salary=salary,
+                            requirements=requirements,
+                            platform=platform,
+                            event=(event_type, classification.summary),
+                        )
+                        application_id = app.id
+                except Exception as exc:  # noqa: BLE001 - this message's failure, not the whole scan's
+                    print(f"[scan] {message_id}: failed to record application - {type(exc).__name__}: {exc}", flush=True)
+                    _record(message_id, "error", None)
+                    continue
+
                 run.events_created += 1
                 if not created:
                     run.applications_updated += 1
