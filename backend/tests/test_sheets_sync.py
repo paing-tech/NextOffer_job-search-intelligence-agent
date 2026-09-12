@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from app.db.models import Application, ApplicationSource, ApplicationStatus, GoogleConnection
 from app.services import sheets_sync
 
@@ -67,6 +69,31 @@ async def test_sync_appends_new_row(session, user, monkeypatch):
     assert requirements == "Python, FastAPI (2+ years)"
     assert status == "Applied"
     assert platform == "LinkedIn"
+
+
+async def test_sync_uses_status_changed_at_not_last_update_at(session, user, monkeypatch):
+    session.add(GoogleConnection(user_id=user.id, encrypted_refresh_token="x", spreadsheet_id="sheet1"))
+    app = _new_application(user.id)
+    # An unrelated edit (e.g. next_action) bumps last_update_at well after the
+    # status itself last changed — the Sheet's "Last Updated" column must
+    # reflect the status change, not this later, unrelated edit.
+    app.status_changed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    app.last_update_at = app.status_changed_at + timedelta(days=5)
+    session.add(app)
+    await session.flush()
+
+    monkeypatch.setattr(sheets_sync, "get_valid_access_token", _async_return("token"))
+    captured = {}
+
+    async def fake_append(access_token, spreadsheet_id, row):
+        captured["row"] = row
+        return 7
+
+    monkeypatch.setattr(sheets_sync, "append_row", fake_append)
+
+    await sheets_sync.sync_application(session, user_id=user.id, application=app)
+    updated = captured["row"][-1]
+    assert "01-01-2026" in updated
 
 
 async def test_sync_updates_existing_row(session, user, monkeypatch):

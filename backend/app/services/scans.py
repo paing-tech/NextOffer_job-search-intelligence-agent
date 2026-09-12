@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +43,25 @@ def _parse_due_date(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def _parse_email_date(value: str | None) -> datetime | None:
+    """Parse the raw RFC 2822 `Date` header off a Gmail message into an aware
+    UTC datetime. This is the real-world date the event happened — used as
+    `status_changed_at`/`occurred_at` instead of "whenever the scan ran",
+    which could be days later (a delayed scan, or a force-rescan of old mail).
+    """
+    if not value:
+        return None
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def serialize_scan_run(run: ScanRun) -> dict:
@@ -148,7 +168,7 @@ async def run_scan(
                     )
                 )
 
-        for message_id, _msg, classification, error, job_result in results:
+        for message_id, msg, classification, error, job_result in results:
             run.messages_scanned += 1
             if error is not None or classification is None:
                 _record(message_id, "error", None)
@@ -193,6 +213,7 @@ async def run_scan(
                             requirements=requirements,
                             platform=platform,
                             event=(event_type, classification.summary),
+                            occurred_at=_parse_email_date(msg.date if msg else None),
                         )
                         application_id = app.id
                 except Exception as exc:  # noqa: BLE001 - this message's failure, not the whole scan's

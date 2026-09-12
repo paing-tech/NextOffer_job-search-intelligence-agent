@@ -99,6 +99,18 @@ class EventType(str, enum.Enum):
     other = "other"
 
 
+# Used to auto-log a timeline event when upsert_application() changes status
+# but the caller didn't supply one explicitly (e.g. the agent's chat tool).
+STATUS_TO_EVENT_TYPE = {
+    ApplicationStatus.saved: EventType.other,
+    ApplicationStatus.applied: EventType.applied,
+    ApplicationStatus.in_progress: EventType.assessment,
+    ApplicationStatus.interview: EventType.interview,
+    ApplicationStatus.accepted: EventType.offer,
+    ApplicationStatus.rejected: EventType.rejection,
+}
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -175,6 +187,11 @@ class Application(Base):
     platform: Mapped[str | None] = mapped_column(String(40))
 
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # When the *current* status began — distinct from last_update_at, which
+    # bumps on any field edit (next_action, salary, ...) and would otherwise
+    # be shown next to the status pill looking like "the date it was rejected"
+    # when it might just be an unrelated edit.
+    status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_update_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

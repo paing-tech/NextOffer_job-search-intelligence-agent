@@ -1,9 +1,9 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 
-from app.db.models import Application, ApplicationStatus, JobPosting, ProcessedEmail
-from app.integrations.gmail import GmailError
+from app.db.models import Application, ApplicationEvent, ApplicationStatus, JobPosting, ProcessedEmail
+from app.integrations.gmail import GmailError, GmailMessage
 from app.llm.schemas import EmailClassification, JobPostingExtraction
 from app.services import scans
 from app.services.jobs import JobFetchResult
@@ -182,6 +182,51 @@ async def test_run_scan_enriches_from_linked_job_posting(session, user, monkeypa
     assert app.platform == "jobstreet"
     posting = list(await session.scalars(select(JobPosting)))[0]
     assert app.job_posting_id == posting.id
+
+
+async def test_run_scan_uses_email_date_for_status_changed_at(session, user, monkeypatch):
+    # A scan can run long after the email arrived (a delayed/scheduled scan, or
+    # a force-rescan of old mail) — status_changed_at must reflect when the
+    # email says the event happened, not whenever this scan happens to run.
+    _patch_access_token(monkeypatch)
+    monkeypatch.setattr(scans, "list_message_ids", _async_return(["m5"]))
+
+    classification = EmailClassification(
+        job_related=True, event_type="interview", company="Acme", job_title="Backend Engineer"
+    )
+    msg = GmailMessage(
+        id="m5",
+        thread_id="t5",
+        subject="Interview invite",
+        sender="hr@acme.com",
+        date="Tue, 12 Jan 2026 03:45:00 +0000",
+        body_text="...",
+    )
+
+    async def fake_fetch_and_classify(access_token, message_id):
+        return message_id, msg, classification, None, None
+
+    monkeypatch.setattr(scans, "_fetch_and_classify", fake_fetch_and_classify)
+
+    await scans.run_scan(session, user_id=user.id, start_date=date(2026, 1, 1), end_date=None)
+
+    app = list(await session.scalars(select(Application)))[0]
+    # SQLite (used in tests) drops tzinfo on round-trip, so compare naive.
+    assert app.status_changed_at.replace(tzinfo=None) == datetime(2026, 1, 12, 3, 45)
+    # last_update_at still reflects real processing time, not the email date.
+    assert app.last_update_at != app.status_changed_at
+
+    event = list(await session.scalars(select(ApplicationEvent)))[0]
+    assert event.occurred_at.replace(tzinfo=None) == datetime(2026, 1, 12, 3, 45)
+
+
+def test_parse_email_date_handles_missing_and_malformed_input():
+    assert scans._parse_email_date(None) is None
+    assert scans._parse_email_date("") is None
+    assert scans._parse_email_date("not a date") is None
+    assert scans._parse_email_date("Tue, 12 Jan 2026 03:45:00 +0700") == datetime(
+        2026, 1, 11, 20, 45, tzinfo=timezone.utc
+    )
 
 
 async def test_run_scan_marks_failed_on_gmail_error(session, user, monkeypatch):

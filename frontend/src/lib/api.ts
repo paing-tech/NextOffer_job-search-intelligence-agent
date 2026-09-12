@@ -31,6 +31,7 @@ export type Application = {
   requirements: string | null;
   platform: string | null;
   first_seen_at: string | null;
+  status_changed_at: string | null;
   last_update_at: string | null;
 };
 

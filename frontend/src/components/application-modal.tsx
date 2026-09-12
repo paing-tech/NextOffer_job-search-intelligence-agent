@@ -55,6 +55,11 @@ export function ApplicationModal({ applicationId, onClose }: { applicationId: st
               <ApplicationCardBody a={detail} />
             </div>
 
+            <section className="modal-section">
+              <h4>Job title</h4>
+              <p className="modal-summary">{detail.job_title}</p>
+            </section>
+
             {posting?.summary && (
               <section className="modal-section">
                 <h4>Summary</h4>

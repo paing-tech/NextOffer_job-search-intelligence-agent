@@ -34,16 +34,33 @@ export function formatAppliedDate(iso: string | null): string {
   return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-function formatLastUpdated(iso: string | null): string {
+// Shows the date the status last changed (falls back to last_update_at for
+// older rows with no recorded status_changed_at), date only (no time), in a
+// deliberately different (numeric) style from "Applied on" so the two dates
+// read as distinct things.
+function formatUpdatedDateOnly(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  const hours24 = d.getHours();
-  const hours = String(hours24 % 12 || 12).padStart(2, "0");
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  const ampm = hours24 >= 12 ? "PM" : "AM";
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
-  return `${hours}:${minutes} ${ampm} ${day}-${month}-${d.getFullYear()}`;
+  return `${day}-${month}-${d.getFullYear()}`;
+}
+
+// Trims a verbose real-world title down to its essentials for the compact
+// card — "x2 Software Engineer (Frontend React/.NET)[Fintech] - Hybrid"
+// becomes "Software Engineer". The full, untouched title is shown when the
+// card is opened.
+function mainTitle(title: string): string {
+  let t = title.trim();
+  t = t.replace(/^x\d+\s+/i, "");
+  let prev: string;
+  do {
+    prev = t;
+    t = t.replace(/\s*\([^()]*\)\s*$/, "");
+    t = t.replace(/\s*\[[^[\]]*\]\s*$/, "");
+    t = t.replace(/\s+-\s+[^-]+$/, "");
+  } while (t !== prev && t.length > 0);
+  return t.trim() || title.trim();
 }
 
 function CheckCircleIcon() {
@@ -59,24 +76,31 @@ function CheckCircleIcon() {
 export function ApplicationCardBody({ a }: { a: Application }) {
   const icon = a.platform ? PLATFORM_ICON[a.platform] : undefined;
   const platformName = a.platform ? PLATFORM_LABEL[a.platform] ?? a.platform : null;
+  const isSaved = a.status === "saved";
 
   return (
     <>
+      {/* Grid, not two independently-stacked columns: title/status share a
+          row and company/date share a row, guaranteed, regardless of each
+          line's own height. */}
       <div className="app-card-top">
-        <span className="app-card-company">{a.company}</span>
-        <div className="app-card-status-block">
-          <span className="app-status" data-status={a.status}>{STATUS_LABEL[a.status] ?? a.status}</span>
-          <span className="app-card-updated">{formatLastUpdated(a.last_update_at)}</span>
-        </div>
+        <p className="app-card-title">{mainTitle(a.job_title)}</p>
+        <span className="app-status" data-status={a.status}>{STATUS_LABEL[a.status] ?? a.status}</span>
+        <p className="app-card-company">{a.company}</p>
+        <span className="app-card-updated">{formatUpdatedDateOnly(a.status_changed_at ?? a.last_update_at)}</span>
       </div>
 
-      <p className="app-card-title">{a.job_title}</p>
-
+      {/* Always rendered, even when empty, so every card has the same
+          structure and height regardless of status/platform. */}
       <div className="app-card-bottom">
-        <span className="app-card-applied">
-          <CheckCircleIcon />
-          Applied on {formatAppliedDate(a.first_seen_at)}
-        </span>
+        {!isSaved ? (
+          <span className="app-card-applied">
+            <CheckCircleIcon />
+            Applied on {formatAppliedDate(a.first_seen_at)}
+          </span>
+        ) : (
+          <span className="app-card-applied" aria-hidden="true">&nbsp;</span>
+        )}
         {icon ? (
           // eslint-disable-next-line @next/next/no-img-element -- small static icon from /public, no optimization needed
           <img className="app-card-platform-icon" src={icon} alt={platformName ?? ""} />

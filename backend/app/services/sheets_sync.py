@@ -33,7 +33,7 @@ async def sync_application(session: AsyncSession, *, user_id: uuid.UUID, applica
         status_label(application.status),
         platform_label(application.platform),
         application.next_action or "",
-        format_last_updated(application.last_update_at),
+        format_last_updated(application.status_changed_at or application.last_update_at),
     ]
     try:
         access_token = await get_valid_access_token(session, user_id)

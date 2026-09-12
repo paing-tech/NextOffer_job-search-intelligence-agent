@@ -10,7 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    STATUS_LABELS,
     STATUS_RANK,
+    STATUS_TO_EVENT_TYPE,
     Application,
     ApplicationEvent,
     ApplicationSource,
@@ -57,6 +59,7 @@ def serialize_application(app: Application, *, include_events: bool = False) -> 
         "platform": app.platform,
         "job_posting_id": str(app.job_posting_id) if app.job_posting_id else None,
         "first_seen_at": app.first_seen_at.isoformat() if app.first_seen_at else None,
+        "status_changed_at": app.status_changed_at.isoformat() if app.status_changed_at else None,
         "last_update_at": app.last_update_at.isoformat() if app.last_update_at else None,
     }
     if include_events:
@@ -88,8 +91,17 @@ async def upsert_application(
     platform: str | None = None,
     status_confidence: float | None = None,
     event: tuple[EventType, str] | None = None,
+    occurred_at: datetime | None = None,
 ) -> tuple[Application, bool]:
-    """Create or update an application by (user, company, title). Returns (app, created)."""
+    """Create or update an application by (user, company, title). Returns (app, created).
+
+    `occurred_at` is when the status-driving event actually happened in the real
+    world (e.g. the Gmail message's Date header) — as opposed to "now", which is
+    merely when we happened to process it. When given, it backdates
+    `status_changed_at` and the logged `ApplicationEvent.occurred_at` so a scan
+    run days after an email arrived (or a force-rescan of old mail) still shows
+    the true date. `last_update_at` always reflects real processing time.
+    """
     key = dedupe_key(company, job_title)
     existing = (
         await session.scalars(
@@ -123,15 +135,36 @@ async def upsert_application(
         app.platform = platform
     if status_confidence is not None:
         app.status_confidence = status_confidence
+
+    now = datetime.now(timezone.utc)
+    change_at = occurred_at or now
+    previous_status = app.status
     # Only move status forward (or to a terminal state); never regress interview -> applied.
     if status is not None and STATUS_RANK.get(status, 0) >= STATUS_RANK.get(app.status, 0):
         app.status = status
-    app.last_update_at = datetime.now(timezone.utc)
+    status_changed = created or app.status != previous_status
+    if status_changed:
+        app.status_changed_at = change_at
+    app.last_update_at = now
 
     if event is not None:
         await session.flush()
         etype, summary = event
-        session.add(ApplicationEvent(application_id=app.id, event_type=etype, summary=summary))
+        ev = ApplicationEvent(application_id=app.id, event_type=etype, summary=summary)
+        if occurred_at is not None:
+            ev.occurred_at = occurred_at
+        session.add(ev)
+    elif status_changed and not created:
+        # No explicit event supplied but the status genuinely moved — auto-log it so
+        # the modal's history stays complete even for status changes made outside
+        # the scan pipeline (e.g. tracking a link, or the chat agent).
+        await session.flush()
+        etype = STATUS_TO_EVENT_TYPE.get(app.status, EventType.status_update)
+        summary = f"Status changed to {STATUS_LABELS.get(app.status, app.status.value)}."
+        ev = ApplicationEvent(application_id=app.id, event_type=etype, summary=summary)
+        if occurred_at is not None:
+            ev.occurred_at = occurred_at
+        session.add(ev)
 
     await session.flush()
     await sync_application(session, user_id=user_id, application=app)
