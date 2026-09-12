@@ -63,7 +63,11 @@ def strict_schema(model: type[BaseModel]) -> dict:
     def _tighten(node: dict) -> None:
         if node.get("type") == "object" or "properties" in node:
             node["additionalProperties"] = False
-            node.setdefault("required", list(node.get("properties", {}).keys()))
+            # Strict mode requires every property in `required`, regardless of
+            # Python-level defaults — nullability is expressed via anyOf+null,
+            # not by omission. Pydantic only lists non-defaulted fields here,
+            # so this must overwrite, never just fill in when absent.
+            node["required"] = list(node.get("properties", {}).keys())
         for value in node.get("properties", {}).values():
             if isinstance(value, dict):
                 _tighten(value)

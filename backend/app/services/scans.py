@@ -61,17 +61,29 @@ async def _fetch_and_classify(
     try:
         msg = await get_message(access_token, message_id)
         if not msg.body_text.strip():
+            print(f"[scan] {message_id} '{msg.subject[:60]}': empty body after extraction, skipping", flush=True)
             return message_id, msg, None, None
         classification, _usage = await classify_email(
             subject=msg.subject, sender=msg.sender, date=msg.date, body_text=msg.body_text
         )
+        print(
+            f"[scan] {message_id} '{msg.subject[:60]}': job_related={classification.job_related} "
+            f"event_type={classification.event_type} company={classification.company!r}",
+            flush=True,
+        )
         return message_id, msg, classification, None
     except Exception as exc:  # noqa: BLE001 - one bad message must not sink the whole scan
+        print(f"[scan] {message_id}: FAILED - {type(exc).__name__}: {exc}", flush=True)
         return message_id, None, None, exc
 
 
 async def run_scan(
-    session: AsyncSession, *, user_id: uuid.UUID, start_date: date, end_date: date | None
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    start_date: date,
+    end_date: date | None,
+    force: bool = False,
 ) -> ScanRun:
     """Raises GoogleNotConnected if the user hasn't connected Google — that's a
     setup problem for the caller to report, not a per-message scan failure."""
@@ -85,17 +97,17 @@ async def run_scan(
         query = build_query(start_date, end_date)
         candidate_ids = await list_message_ids(access_token, query)
 
-        already_seen: set[str] = set()
+        existing_by_id: dict[str, ProcessedEmail] = {}
         if candidate_ids:
-            already_seen = set(
-                await session.scalars(
-                    select(ProcessedEmail.gmail_message_id).where(
-                        ProcessedEmail.user_id == user_id,
-                        ProcessedEmail.gmail_message_id.in_(candidate_ids),
-                    )
+            existing_rows = await session.scalars(
+                select(ProcessedEmail).where(
+                    ProcessedEmail.user_id == user_id,
+                    ProcessedEmail.gmail_message_id.in_(candidate_ids),
                 )
             )
-        new_ids = [mid for mid in candidate_ids if mid not in already_seen]
+            existing_by_id = {row.gmail_message_id: row for row in existing_rows}
+
+        new_ids = candidate_ids if force else [mid for mid in candidate_ids if mid not in existing_by_id]
 
         semaphore = asyncio.Semaphore(_CONCURRENCY)
 
@@ -105,10 +117,25 @@ async def run_scan(
 
         results = await asyncio.gather(*(bounded(mid) for mid in new_ids))
 
+        def _record(message_id: str, classification_label: str, application_id: uuid.UUID | None) -> None:
+            row = existing_by_id.get(message_id)
+            if row is not None:  # force rescan of a message we've already seen -> update in place
+                row.classification = classification_label
+                row.application_id = application_id
+            else:
+                session.add(
+                    ProcessedEmail(
+                        user_id=user_id,
+                        gmail_message_id=message_id,
+                        classification=classification_label,
+                        application_id=application_id,
+                    )
+                )
+
         for message_id, _msg, classification, error in results:
             run.messages_scanned += 1
             if error is not None or classification is None:
-                session.add(ProcessedEmail(user_id=user_id, gmail_message_id=message_id, classification="error"))
+                _record(message_id, "error", None)
                 continue
 
             application_id = None
@@ -134,14 +161,7 @@ async def run_scan(
                 if not created:
                     run.applications_updated += 1
 
-            session.add(
-                ProcessedEmail(
-                    user_id=user_id,
-                    gmail_message_id=message_id,
-                    classification="job_related" if classification.job_related else "not_related",
-                    application_id=application_id,
-                )
-            )
+            _record(message_id, "job_related" if classification.job_related else "not_related", application_id)
         run.status = "completed"
     except GmailError as exc:
         run.status = "failed"

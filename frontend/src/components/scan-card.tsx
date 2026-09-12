@@ -18,6 +18,7 @@ export function ScanCard() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [includePresent, setIncludePresent] = useState(true);
+  const [force, setForce] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export function ScanCard() {
         body: JSON.stringify({
           start_date: startDate,
           end_date: includePresent ? null : endDate || null,
+          force,
         }),
       });
       const data = await res.json();
@@ -85,6 +87,15 @@ export function ScanCard() {
             onChange={(e) => setIncludePresent(e.target.checked)}
           />
           Include up to today
+        </label>
+        <label className="scan-present" htmlFor="scan-force">
+          <input
+            id="scan-force"
+            type="checkbox"
+            checked={force}
+            onChange={(e) => setForce(e.target.checked)}
+          />
+          Rescan emails already seen in this range
         </label>
         <button className="button primary" type="submit" disabled={busy || !startDate}>
           {busy ? "Scanning…" : "Scan now"}

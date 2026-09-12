@@ -56,7 +56,7 @@ async def classify_email(*, subject: str, sender: str, date: str, body_text: str
             {"role": "user", "content": user[:16000]},
         ],
         response_schema=strict_schema(EmailClassification),
-        max_tokens=700,
+        max_tokens=1500,
     )
     if result.parsed is None:
         raise ValueError("Model did not return valid structured output for the email.")

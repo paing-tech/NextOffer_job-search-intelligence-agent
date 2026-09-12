@@ -22,6 +22,7 @@ router = APIRouter(prefix="/scans", tags=["scans"])
 class ScanRequest(BaseModel):
     start_date: date
     end_date: date | None = None  # None = up to now
+    force: bool = False  # rescan messages already seen in a prior run
 
     @model_validator(mode="after")
     def _range_is_sane(self):
@@ -51,7 +52,9 @@ async def run_scan_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
-        run = await run_scan(session, user_id=user.id, start_date=body.start_date, end_date=body.end_date)
+        run = await run_scan(
+            session, user_id=user.id, start_date=body.start_date, end_date=body.end_date, force=body.force
+        )
     except GoogleNotConnected as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Connect Google in Settings first.") from exc
     return serialize_scan_run(run)
