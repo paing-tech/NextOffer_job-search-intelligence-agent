@@ -13,6 +13,8 @@ export type JobPosting = {
   experience_requirements: string[];
   education_requirements: string[];
   summary: string | null;
+  created_at?: string | null;
+  tracked_application_id?: string | null;
 };
 
 export type AgentEvent =
@@ -107,11 +109,45 @@ export async function* streamChat(
   }
 }
 
-export async function listApplications(): Promise<Application[]> {
-  const res = await fetch("/api/backend/applications", { headers: { accept: "application/json" } });
+export type ChatSessionSummary = {
+  id: string;
+  title: string;
+  updated_at: string | null;
+  created_at: string | null;
+};
+
+export type ChatHistoryMessage = { role: "user" | "assistant"; content: string };
+
+/** GET /api/backend/chat/sessions — past chat sessions, most recently updated first. */
+export async function listChatSessions(): Promise<ChatSessionSummary[]> {
+  const res = await fetch("/api/backend/chat/sessions", { headers: { accept: "application/json" } });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { sessions: ChatSessionSummary[] };
+  return data.sessions;
+}
+
+/** GET /api/backend/chat/sessions/{id} — a past session's displayable transcript. */
+export async function getChatSession(id: string): Promise<ChatHistoryMessage[] | null> {
+  const res = await fetch(`/api/backend/chat/sessions/${id}`, { headers: { accept: "application/json" } });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { messages: ChatHistoryMessage[] };
+  return data.messages;
+}
+
+export async function listApplications(status?: string): Promise<Application[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await fetch(`/api/backend/applications${qs}`, { headers: { accept: "application/json" } });
   if (!res.ok) return [];
   const data = (await res.json()) as { applications: Application[] };
   return data.applications;
+}
+
+/** GET /api/backend/jobs — every job posting the user has ever analyzed, newest first. */
+export async function listJobPostings(): Promise<JobPosting[]> {
+  const res = await fetch("/api/backend/jobs", { headers: { accept: "application/json" } });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { job_postings: JobPosting[] };
+  return data.job_postings;
 }
 
 export async function getApplication(id: string): Promise<ApplicationDetail | null> {

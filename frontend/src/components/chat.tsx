@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { JobPostingCard } from "@/components/job-posting-card";
-import { streamChat, type JobPosting } from "@/lib/api";
+import { getChatSession, streamChat, type JobPosting } from "@/lib/api";
 
 type Message = {
   role: "user" | "assistant";
@@ -15,13 +16,35 @@ type Message = {
 const QUICK_MESSAGES = [{ label: "Analyze Job", fill: "Analyze this job link: " }];
 
 export default function Chat() {
+  const historySessionId = useSearchParams().get("session");
+  // Keying on the session id makes ChatSession remount (fresh state) whenever
+  // it changes — including back to null for "New chat" — rather than having
+  // to manually reset every piece of state (input/busy/messages/…) ourselves.
+  return <ChatSession key={historySessionId ?? "new"} historySessionId={historySessionId} />;
+}
+
+function ChatSession({ historySessionId }: { historySessionId: string | null }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const sessionId = useRef<string | null>(null);
+  const sessionId = useRef<string | null>(historySessionId);
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  // Loads a past session picked from the history panel (?session=<id>). A
+  // fresh load/reload carries no param, so this never runs and chat starts
+  // empty (the initial useState([]) above), matching "always start empty".
+  useEffect(() => {
+    if (!historySessionId) return;
+    let active = true;
+    getChatSession(historySessionId).then((history) => {
+      if (active && history) setMessages(history);
+    });
+    return () => {
+      active = false;
+    };
+  }, [historySessionId]);
 
   useEffect(() => {
     if (messages.length) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

@@ -11,10 +11,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import JobPosting
+from app.db.models import Application, JobPosting
 from app.integrations.jobfetch import detect_platform, fetch_posting
 from app.llm.extraction import extract_job_posting
 from app.llm.schemas import JobPostingExtraction
@@ -32,7 +33,7 @@ class JobFetchResult:
     fetch_source: str | None = None
 
 
-def serialize_posting(posting: JobPosting) -> dict:
+def serialize_posting(posting: JobPosting, *, tracked_application_id: uuid.UUID | None = None) -> dict:
     return {
         "id": str(posting.id),
         "source_url": posting.source_url,
@@ -48,7 +49,36 @@ def serialize_posting(posting: JobPosting) -> dict:
         "experience_requirements": posting.experience_requirements,
         "education_requirements": posting.education_requirements,
         "summary": posting.summary,
+        "created_at": posting.created_at.isoformat() if posting.created_at else None,
+        "tracked_application_id": str(tracked_application_id) if tracked_application_id else None,
     }
+
+
+async def list_job_postings(session: AsyncSession, *, user_id: uuid.UUID, limit: int = 50) -> list[dict]:
+    """Every job posting the user has ever analyzed (via chat link, paste, or a
+    scanned email), newest first — independent of whether it was ever tracked
+    as an application. Backs the Library tab."""
+    postings = list(
+        await session.scalars(
+            select(JobPosting)
+            .where(JobPosting.user_id == user_id)
+            .order_by(JobPosting.created_at.desc())
+            .limit(limit)
+        )
+    )
+    if not postings:
+        return []
+
+    tracked_rows = list(
+        await session.scalars(
+            select(Application).where(
+                Application.user_id == user_id,
+                Application.job_posting_id.in_([p.id for p in postings]),
+            )
+        )
+    )
+    tracked_by_posting = {row.job_posting_id: row.id for row in tracked_rows}
+    return [serialize_posting(p, tracked_application_id=tracked_by_posting.get(p.id)) for p in postings]
 
 
 async def fetch_and_extract(url: str) -> JobFetchResult | dict:

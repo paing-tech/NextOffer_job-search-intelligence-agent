@@ -9,9 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.db.models import User
 from app.db.session import get_session
-from app.services.jobs import analyze_job
+from app.services.jobs import analyze_job, list_job_postings
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+@router.get("")
+async def list_postings(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    return {"job_postings": await list_job_postings(session, user_id=user.id)}
 
 
 class AnalyzeRequest(BaseModel):
