@@ -1,19 +1,27 @@
 @import "tailwindcss";
 
-:root{color-scheme:light dark;--bg:#f2f2f7;--surface:#ffffff;--ink:#202d27;--muted:#727b74;--line:#e1e6df;--nav-active-bg:rgba(0,0,0,.08);--nav-active-ink:#1c1c1e;--navbar-bg-1:rgba(255,255,255,.82);--navbar-bg-2:rgba(255,255,255,.68);--navbar-border:rgba(0,0,0,.08);--navbar-highlight:rgba(255,255,255,.6);--navbar-icon:rgba(0,0,0,.55);--navbar-icon-active:#1c1c1e;--navbar-pill-bg:rgba(0,0,0,.06);--navbar-pill-bg-enlarged:rgba(0,0,0,.03);--navbar-pill-border:rgba(0,0,0,.1);--navbar-pill-border-enlarged:rgba(0,0,0,.06);--navbar-fallback:#f2f2f2;--navbar-pill-fallback:#e2e2e5}
+:root{color-scheme:light dark;--bg:#f2f2f7;--surface:#ffffff;--ink:#202d27;--muted:#727b74;--line:#e1e6df;--nav-active-bg:rgba(0,0,0,.08);--nav-active-ink:#1c1c1e;--navbar-bg-1:rgba(255,255,255,.78);--navbar-bg-2:rgba(255,255,255,.64);--navbar-border:rgba(0,0,0,.08);--navbar-highlight:rgba(255,255,255,.6);--navbar-icon:rgba(0,0,0,.55);--navbar-icon-active:#1c1c1e;--navbar-pill-bg:rgba(0,0,0,.06);--navbar-pill-bg-enlarged:rgba(0,0,0,.03);--navbar-pill-border:rgba(0,0,0,.1);--navbar-pill-border-enlarged:rgba(0,0,0,.06);--navbar-fallback:#f2f2f2;--navbar-pill-fallback:#e2e2e5;--topbar-scrim-1:rgba(255,255,255,.78);--topbar-scrim-2:rgba(255,255,255,.64);--topbar-blur:2px;--topbar-saturate:1.4;--topbar-text:#1c1c1e;--topbar-filter-bg:rgba(0,0,0,.06);--topbar-filter-border:rgba(0,0,0,.14)}
 /* The bottom tab bar's own Liquid Glass material is themed separately from
    the rest of the app: it's a real white/dark glass surface (like Apple's
    own tab bars), with a gray glass pill + black/white "selected" icon
    depending on theme. */
-@media(prefers-color-scheme:dark){:root{--bg:#000000;--surface:#1c1c1e;--ink:#f2f2f2;--muted:#98989d;--line:#3a3a3c;--nav-active-bg:rgba(255,255,255,.14);--nav-active-ink:#f5f5f5;--navbar-bg-1:rgba(0,0,0,.78);--navbar-bg-2:rgba(0,0,0,.64);--navbar-border:rgba(255,255,255,.3);--navbar-highlight:rgba(255,255,255,.15);--navbar-icon:rgba(255,255,255,.65);--navbar-icon-active:#fff;--navbar-pill-bg:rgba(255,255,255,.22);--navbar-pill-bg-enlarged:rgba(255,255,255,.1);--navbar-pill-border:rgba(255,255,255,.4);--navbar-pill-border-enlarged:rgba(255,255,255,.22);--navbar-fallback:#1c1c1e;--navbar-pill-fallback:#3a3a3c}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px}button,input,textarea,select{font:inherit}a{color:inherit;text-decoration:none}button,a,input,textarea,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled,select:disabled,input:disabled{cursor:not-allowed;opacity:.55}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #8f959c;outline-offset:4px}.shell{min-height:100svh;display:flex;flex-direction:column}.topbar{flex-shrink:0;padding-top:max(14px,env(safe-area-inset-top))}.brand{display:flex;align-items:center;font-size:18px;font-weight:700;letter-spacing:-.6px}.brand-dot{color:#8a8f98}.content{flex:1;display:flex;flex-direction:column;width:100%;max-width:760px;margin:0 auto;padding:0 16px;padding-bottom:calc(110px + env(safe-area-inset-bottom))}.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;padding:0 16px calc(4px + env(safe-area-inset-bottom));pointer-events:none}/* Apple's Liquid Glass "regular" material (per HIG): 20-40px backdrop blur,
+@media(prefers-color-scheme:dark){:root{--bg:#000000;--surface:#1c1c1e;--ink:#f2f2f2;--muted:#98989d;--line:#3a3a3c;--nav-active-bg:rgba(255,255,255,.14);--nav-active-ink:#f5f5f5;--navbar-bg-1:rgba(0,0,0,.78);--navbar-bg-2:rgba(0,0,0,.64);--navbar-border:rgba(255,255,255,.3);--navbar-highlight:rgba(255,255,255,.15);--navbar-icon:rgba(255,255,255,.65);--navbar-icon-active:#fff;--navbar-pill-bg:rgba(255,255,255,.22);--navbar-pill-bg-enlarged:rgba(255,255,255,.1);--navbar-pill-border:rgba(255,255,255,.4);--navbar-pill-border-enlarged:rgba(255,255,255,.22);--navbar-fallback:#1c1c1e;--navbar-pill-fallback:#3a3a3c;--topbar-scrim-1:rgba(0,0,0,.78);--topbar-scrim-2:rgba(0,0,0,.64);--topbar-blur:2px;--topbar-saturate:1.4;--topbar-text:#fff;--topbar-filter-bg:rgba(255,255,255,.14);--topbar-filter-border:rgba(255,255,255,.3)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px}
+/* apple-mobile-web-app-status-bar-style is black-translucent (see
+   layout.tsx) so the page can extend behind the notch/Dynamic Island.
+   .topbar-frozen::before already covers that area on its own (its inset:0
+   starts at .topbar-frozen's own top:0) — a separate strip layered on top
+   of it, even with matching color/blur, still reads as a seam: two
+   independently-computed backdrop-filter regions never blend perfectly at
+   their shared edge. The status bar icons stay legible without one, so no
+   extra element is needed here. */button,input,textarea,select{font:inherit}a{color:inherit;text-decoration:none}button,a,input,textarea,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled,select:disabled,input:disabled{cursor:not-allowed;opacity:.55}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #8f959c;outline-offset:4px}.shell{min-height:100svh;display:flex;flex-direction:column}.topbar{flex-shrink:0;padding-top:max(14px,env(safe-area-inset-top))}.brand{display:flex;align-items:center;font-size:18px;font-weight:700;letter-spacing:-.6px}.brand-dot{color:#8a8f98}.content{flex:1;display:flex;flex-direction:column;width:100%;max-width:760px;margin:0 auto;padding:0 16px;padding-bottom:calc(110px + env(safe-area-inset-bottom))}.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;padding:0 16px calc(4px + env(safe-area-inset-bottom));pointer-events:none}/* Apple's Liquid Glass "regular" material (per HIG): 20-40px backdrop blur,
    1.2-1.5x saturation boost to keep whatever scrolls underneath vibrant,
    60-80% tinted fill, and a 1px translucent hairline border/highlight —
    glass belongs on floating chrome like this tab bar, not page content.
    Text/icons are pinned to white (not theme-tokens) since this bg stays
    dark-tinted regardless of light/dark mode, same reasoning as the top
    bar's title. */
-.bottomnav-inner{position:relative;z-index:0;pointer-events:auto;display:flex;gap:2px;width:100%;max-width:480px;height:72px;background:linear-gradient(180deg,var(--navbar-bg-1),var(--navbar-bg-2));backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);border:1px solid var(--navbar-border);border-radius:36px;padding:4px;box-shadow:0 12px 30px #0000002e,0 2px 8px #00000022,inset 0 1px 0 var(--navbar-highlight);transition:transform .3s cubic-bezier(.4,0,.2,1);transform-origin:center bottom;will-change:transform}
+.bottomnav-inner{position:relative;z-index:0;pointer-events:auto;display:flex;gap:2px;width:100%;max-width:480px;height:64px;background:linear-gradient(180deg,var(--navbar-bg-1),var(--navbar-bg-2));backdrop-filter:blur(2px) saturate(1.4);-webkit-backdrop-filter:blur(2px) saturate(1.4);border:1px solid var(--navbar-border);border-radius:32px;padding:4px;box-shadow:0 12px 30px #0000002e,0 2px 8px #00000022,inset 0 1px 0 var(--navbar-highlight);transition:transform .3s cubic-bezier(.4,0,.2,1);transform-origin:center bottom;will-change:transform}
 @media(prefers-reduced-transparency:reduce){.bottomnav-inner{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--navbar-fallback)}}
 .bottomnav-inner.compact{transform:scale(.82)}
 /* Held continuously while hovered/pressed (not a one-shot animation) —
@@ -21,7 +29,7 @@
    transition above. */
 .bottomnav-inner.pressed{transform:scale(1.06)}
 @media(prefers-reduced-motion:reduce){.bottomnav-inner{transition:none}}
-.navtab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:100%;border-radius:32px;color:var(--navbar-icon);font-size:11px;font-weight:600;padding:0 2px}
+.navtab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:100%;border-radius:32px;color:var(--navbar-icon);font-size:10px;font-weight:600;padding:0 2px}
 .navtab.active{color:var(--navbar-icon-active)}
 /* The sliding indicator: one shared glass pill (not per-tab), positioned via
    inline transform/width computed in JS off the active tab's real DOM rect
@@ -35,7 +43,7 @@
    tab is hovered/pressed; plain CSS :hover/:active is unreliable for this
    on iOS Safari) scales it up via the same inline transform and turns it
    more transparent, echoing how the material thins out under motion. */
-.nav-indicator{position:absolute;top:6px;bottom:6px;left:0;z-index:-1;border-radius:999px;background:var(--navbar-pill-bg);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border:1px solid var(--navbar-pill-border);box-shadow:0 6px 16px #00000033,inset 0 1px 0 var(--navbar-highlight);transition:transform .3s cubic-bezier(.4,0,.2,1),background-color .25s ease,border-color .25s ease;pointer-events:none}
+.nav-indicator{position:absolute;top:4px;bottom:4px;left:0;z-index:-1;border-radius:999px;background:var(--navbar-pill-bg);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border:1px solid var(--navbar-pill-border);box-shadow:0 6px 16px #00000033,inset 0 1px 0 var(--navbar-highlight);transition:transform .3s cubic-bezier(.4,0,.2,1),background-color .25s ease,border-color .25s ease;pointer-events:none}
 .nav-indicator.enlarged{background:var(--navbar-pill-bg-enlarged);border-color:var(--navbar-pill-border-enlarged)}
 @media(prefers-reduced-motion:reduce){.nav-indicator{transition:background-color .25s ease,border-color .25s ease}}
 @media(prefers-reduced-transparency:reduce){.nav-indicator{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--navbar-pill-fallback)}}
@@ -55,22 +63,23 @@
 
 .share-page{padding-bottom:24px}.share-title{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 8px}.share-status{color:var(--muted);line-height:1.7;font-size:13px;margin:14px 0}.share-result{margin-top:8px}.share-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}.share-actions .button{min-width:130px;text-align:center}
 
-/* Frozen header for the Applications page only — content scrolls freely
-   underneath it, fading out under a dark scrim rather than a hard-edged
-   solid bar, while the title stays centered and pinned. The scrim is a
-   fixed dark tint (not theme-aware) since it needs to stay legible over
-   whatever card colors are scrolling behind it in either theme. Other
-   pages keep the plain, in-flow empty .topbar spacer untouched. */
+/* Frozen header for the Applications and Agent pages — content scrolls
+   freely underneath it, fading out under a scrim rather than a hard-edged
+   solid bar, while the title stays centered and pinned. The scrim/title/
+   filter-button colors are theme-aware (--topbar-* vars), same Liquid Glass
+   blur+saturate recipe as the tab bar in light mode (dark mode keeps its
+   own hand-tuned lighter blur). Other pages keep the plain, in-flow empty
+   .topbar spacer untouched. */
 /* The scrim lives on ::before, not on .topbar-frozen itself — its
    mask-image fades based on *this element's own* box height, and would
    otherwise mask out the filter dropdown too (an absolutely-positioned
    descendant that renders well below that height), making it invisible. */
 .topbar-frozen{position:fixed;top:0;left:0;right:0;z-index:15;display:flex;align-items:center;gap:8px;width:100%;max-width:760px;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) 16px 22px;pointer-events:none}
-.topbar-frozen::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(to bottom,rgba(0,0,0,.9),rgba(0,0,0,.1) 65%,transparent);backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);mask-image:linear-gradient(to bottom,#000 60%,transparent);-webkit-mask-image:linear-gradient(to bottom,#000 60%,transparent)}
+.topbar-frozen::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(to bottom,var(--topbar-scrim-1),var(--topbar-scrim-2) 65%,transparent);backdrop-filter:blur(var(--topbar-blur)) saturate(var(--topbar-saturate));-webkit-backdrop-filter:blur(var(--topbar-blur)) saturate(var(--topbar-saturate));mask-image:linear-gradient(to bottom,#000 60%,transparent);-webkit-mask-image:linear-gradient(to bottom,#000 60%,transparent)}
 .topbar-spacer{width:44px;flex-shrink:0}
-.topbar-title{flex:1;text-align:center;margin:0;font-size:17px;font-weight:700;letter-spacing:-.3px;color:#fff}
+.topbar-title{flex:1;text-align:center;margin:0;font-size:17px;font-weight:700;letter-spacing:-.3px;color:var(--topbar-text)}
 .topbar-filter-wrap{position:relative;flex-shrink:0;pointer-events:auto}
-.topbar-filter{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.14);color:#fff}
+.topbar-filter{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:1px solid var(--topbar-filter-border);background:var(--topbar-filter-bg);color:var(--topbar-text)}
 .topbar-filter svg{width:24px;height:24px}
 .topbar-filter.active{background:var(--nav-active-bg);color:var(--nav-active-ink);border-color:transparent}
 .topbar-filter-backdrop{position:fixed;inset:0;z-index:16}

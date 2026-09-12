@@ -8,7 +8,12 @@ export const metadata: Metadata = {
   description: "Chat with your job search assistant and keep your applications organized in Google Sheets.",
   manifest: "/manifest.webmanifest",
   applicationName: "NextOffer",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "NextOffer" },
+  // black-translucent lets the page's own background extend behind the
+  // notch/Dynamic Island (instead of iOS reserving an opaque status bar) —
+  // it also forces the status bar icons to always render white, regardless
+  // of light/dark mode, which is why globals.css keeps a small always-dark
+  // strip behind them for legibility (see body::before).
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "NextOffer" },
   icons: {
     icon: "/icon.svg",
     apple: "/apple-touch-icon.png",

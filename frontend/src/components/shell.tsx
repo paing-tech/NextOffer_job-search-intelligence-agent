@@ -256,7 +256,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     // misaligned pill whenever a scale happens to be active at tap time
     // (which it usually is, since tapping a tab also triggers the bar's own
     // press-scale). A small inset keeps adjacent pills from ever touching.
-    setIndicator({ left: tabEl.offsetLeft + 3, width: tabEl.offsetWidth - 6 });
+    setIndicator({ left: tabEl.offsetLeft + 3, width: tabEl.offsetWidth - 4 });
   }, [activeHref]);
 
   useLayoutEffect(() => {
