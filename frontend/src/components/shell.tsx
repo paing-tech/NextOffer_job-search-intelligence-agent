@@ -179,6 +179,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   // hovered or pressed/touched; scales up while true, eases back to whatever
   // navCompact says once released.
   const [navActive, setNavActive] = useState(false);
+  // Which tab (by href) is currently hovered/pressed — the selected tab's
+  // glass pill only bulges past the bar's edges while it is the one being
+  // interacted with; otherwise it sits flush, matching its old flat size.
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
   const lastScrollY = useRef(0);
 
   useEffect(() => {
@@ -196,6 +200,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (pathname === "/login" || pathname.startsWith("/auth/")) return <>{children}</>;
+
+  function tabClassName(href: string, isActive: boolean) {
+    if (!isActive) return "navtab";
+    return hoveredTab === href ? "navtab active enlarged" : "navtab active";
+  }
+
+  function tabHoverHandlers(href: string) {
+    const clear = () => setHoveredTab((h) => (h === href ? null : h));
+    return {
+      onMouseEnter: () => setHoveredTab(href),
+      onMouseLeave: clear,
+      onPointerDown: () => setHoveredTab(href),
+      onPointerUp: clear,
+      onPointerCancel: clear,
+      onPointerLeave: clear,
+    };
+  }
 
   const isApplications = pathname.startsWith("/applications");
   const isLibrary = pathname.startsWith("/library");
@@ -238,8 +259,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         >
           <Link
             href="/applications"
-            className={isApplications ? "navtab active" : "navtab"}
+            className={tabClassName("/applications", isApplications)}
             aria-current={isApplications ? "page" : undefined}
+            {...tabHoverHandlers("/applications")}
           >
             <BriefcaseIcon />
             <span>Applications</span>
@@ -249,27 +271,30 @@ export function Shell({ children }: { children: React.ReactNode }) {
               what plays it (via the imperative startAnimation handle). */}
           <Link
             href="/library"
-            className={isLibrary ? "navtab active" : "navtab"}
+            className={tabClassName("/library", isLibrary)}
             aria-current={isLibrary ? "page" : undefined}
             onClick={() => libraryIconRef.current?.startAnimation()}
+            {...tabHoverHandlers("/library")}
           >
             <BlocksIcon ref={libraryIconRef} />
             <span>Library</span>
           </Link>
           <Link
             href="/"
-            className={isAgent ? "navtab active" : "navtab"}
+            className={tabClassName("/", isAgent)}
             aria-current={isAgent ? "page" : undefined}
             onClick={() => agentIconRef.current?.startAnimation()}
+            {...tabHoverHandlers("/")}
           >
             <AtomIcon ref={agentIconRef} />
             <span>Agent</span>
           </Link>
           <Link
             href="/settings"
-            className={isProfile ? "navtab active" : "navtab"}
+            className={tabClassName("/settings", isProfile)}
             aria-current={isProfile ? "page" : undefined}
             onClick={() => profileIconRef.current?.startAnimation()}
+            {...tabHoverHandlers("/settings")}
           >
             <UserRoundIcon ref={profileIconRef} />
             <span>Profile</span>
