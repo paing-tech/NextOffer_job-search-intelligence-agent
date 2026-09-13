@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,7 @@ from app.auth.deps import get_current_user
 from app.db.models import ScanRun, User
 from app.db.session import get_session
 from app.integrations.google_oauth import GoogleNotConnected, GoogleOAuthError
+from app.services.auto_scan import get_auto_scan_config, serialize_auto_scan_config, set_auto_scan_config
 from app.services.scans import run_scan, serialize_scan_run
 
 router = APIRouter(prefix="/scans", tags=["scans"])
@@ -60,3 +61,39 @@ async def run_scan_endpoint(
     except GoogleOAuthError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     return serialize_scan_run(run)
+
+
+class AutoScanRequest(BaseModel):
+    enabled: bool
+    start_date: date
+    frequency_minutes: int = Field(default=30, ge=15, le=1440)
+
+    @model_validator(mode="after")
+    def _start_not_future(self):
+        if self.start_date > date.today():
+            raise ValueError("start_date can't be in the future")
+        return self
+
+
+@router.get("/auto")
+async def get_auto_scan_endpoint(
+    user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)
+) -> dict:
+    config = await get_auto_scan_config(session, user_id=user.id)
+    return {"config": serialize_auto_scan_config(config) if config else None}
+
+
+@router.put("/auto")
+async def set_auto_scan_endpoint(
+    body: AutoScanRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    config = await set_auto_scan_config(
+        session,
+        user_id=user.id,
+        enabled=body.enabled,
+        start_date=body.start_date,
+        frequency_minutes=body.frequency_minutes,
+    )
+    return {"config": serialize_auto_scan_config(config)}

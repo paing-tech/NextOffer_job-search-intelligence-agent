@@ -4,6 +4,7 @@ import { SignOut } from "@/components/sign-out";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { SpreadsheetCard } from "@/components/spreadsheet-card";
 import { ScanCard } from "@/components/scan-card";
+import { AutoScanCard } from "@/components/auto-scan-card";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -17,8 +18,8 @@ export default async function SettingsPage() {
       </Suspense>
       <SpreadsheetCard />
       <ScanCard />
-      <section className="settings-card" aria-labelledby="auto-scan-title"><div className="card-title"><h3 id="auto-scan-title">04 <span>Automatic email scans</span></h3><span className="status">Not active</span></div><p>Run scans on a schedule on the server, even when you close this app.</p><div className="scan-options"><label htmlFor="automatic"><input id="automatic" type="checkbox" disabled /> Enable automatic scans</label><label htmlFor="frequency">Scan frequency<select id="frequency" disabled defaultValue="30"><option value="30">Every 30 minutes (planned)</option></select></label></div></section>
-      <p className="settings-footer">Google connection, Sheets sync, and manual Gmail scans are live. Scheduled automatic scans are next. Job-link analysis works now — try it in Agent.</p>
+      <AutoScanCard />
+      <p className="settings-footer">Google connection, Sheets sync, manual Gmail scans, and scheduled automatic scans are all live. Job-link analysis works now — try it in Agent.</p>
     </main>
   );
 }

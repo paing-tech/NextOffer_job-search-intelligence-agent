@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     agent_max_tool_iterations: int = 6
     chat_history_window: int = 20
 
+    # How often (seconds) the in-process background loop checks for due
+    # automatic Gmail scans. Per-user cadence is separate (AutoScanConfig.
+    # frequency_minutes) — this just controls how promptly a due scan is
+    # picked up.
+    auto_scan_poll_seconds: int = 60
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

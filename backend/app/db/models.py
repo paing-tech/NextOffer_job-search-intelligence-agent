@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     JSON,
+    Boolean,
+    Date,
     DateTime,
     Enum,
     Float,
@@ -255,6 +257,26 @@ class ScanRun(Base):
     events_created: Mapped[int] = mapped_column(Integer, default=0)
     applications_updated: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class AutoScanConfig(Base):
+    """One row per user: whether scheduled scanning is on, the fixed start
+    date scans always run from (through "now" each time), and how often. A
+    background loop (app.services.auto_scan) polls this table and re-runs
+    run_scan() for whoever is due — the same idempotent pipeline the manual
+    "Scan now" button uses, so re-running never reprocesses old messages."""
+
+    __tablename__ = "auto_scan_configs"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    start_date: Mapped[date] = mapped_column(Date)
+    frequency_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status: Mapped[str | None] = mapped_column(String(20))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class ChatSession(Base):
