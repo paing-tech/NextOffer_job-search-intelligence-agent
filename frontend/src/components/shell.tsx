@@ -7,17 +7,11 @@ import { FilterAltIcon } from "@/components/icons/filter-alt-icon";
 import { BlocksIcon, type BlocksIconHandle } from "@/components/icons/blocks-icon";
 import { UserRoundIcon, type UserRoundIconHandle } from "@/components/icons/user-round-icon";
 import { AtomIcon, type AtomIconHandle } from "@/components/icons/atom-icon";
+import {
+  LaptopMinimalCheckIcon,
+  type LaptopMinimalCheckIconHandle,
+} from "@/components/icons/laptop-minimal-check-icon";
 import { listChatSessions, type ChatSessionSummary } from "@/lib/api";
-
-function BriefcaseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="7.5" width="18" height="12.5" rx="1.6" />
-      <path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5" />
-      <path d="M3 12h18" />
-    </svg>
-  );
-}
 
 function HistoryIcon() {
   return (
@@ -197,6 +191,7 @@ function usePressState() {
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const applicationsIconRef = useRef<LaptopMinimalCheckIconHandle>(null);
   const libraryIconRef = useRef<BlocksIconHandle>(null);
   const agentIconRef = useRef<AtomIconHandle>(null);
   const profileIconRef = useRef<UserRoundIconHandle>(null);
@@ -350,9 +345,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
             }}
             className={isApplications ? "navtab active" : "navtab"}
             aria-current={isApplications ? "page" : undefined}
+            onClick={() => applicationsIconRef.current?.startAnimation()}
             {...tabHoverHandlers("/applications")}
           >
-            <BriefcaseIcon />
+            <LaptopMinimalCheckIcon ref={applicationsIconRef} />
             <span>Applications</span>
           </Link>
           {/* Ref present -> the icon is "controlled": hover no longer

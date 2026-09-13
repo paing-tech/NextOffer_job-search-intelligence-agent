@@ -93,7 +93,7 @@
 .topbar-history-menu li:first-child{padding-bottom:6px;margin-bottom:4px;border-bottom:1px solid var(--line)}
 .topbar-history-empty{padding:10px 12px;font-size:13px;color:var(--muted)}
 .apps-page{padding-top:calc(70px + env(safe-area-inset-top));padding-bottom:24px}.apps-empty{color:var(--muted);line-height:1.8;font-size:13px;margin-top:8px}.apps-empty a{color:var(--ink);font-weight:600}.apps-list{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:1fr;gap:12px}
-.app-card{display:block;width:100%;background:linear-gradient(180deg, #1c1c1e 0%, #FF6D00 50%, #FFFFFF 95%);border:1px solid var(--line);border-radius:20px;padding:22px 20px;overflow-wrap:anywhere;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.app-card{display:block;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:22px 20px;overflow-wrap:anywhere;text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* Grid (not flex) so the title/status share row 1 and company/date share row
    2 exactly — a flex row + independently-stacked side column can drift apart
    whenever the two stacks' line-heights don't match pixel-for-pixel. */
